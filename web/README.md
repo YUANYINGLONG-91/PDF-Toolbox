@@ -64,7 +64,7 @@ Screenshots are written to the ignored `test-output/` directory.
 
 `vite.config.ts` uses `base: './'`, so built asset URLs work on GitHub Pages **project sites** (for example, `https://USER.github.io/REPOSITORY/`) without hard-coding a repository name.
 
-The repository-level `.github/workflows/pages.yml` workflow runs `npm ci`, unit tests, and `npm run build` in `web`, uploads `web/dist`, and deploys it with GitHub Pages actions. Set **Settings → Pages → Source** to **GitHub Actions**, then push to `main` or run the workflow manually.
+The repository-level `.github/workflows/pages.yml` workflow runs `npm ci`, unit tests, and `npm run build` in `web`, then copies `web/dist/` to the `main` branch root. This repository uses **Settings → Pages → Deploy from a branch → `main` / `/ (root)`**. The root `.nojekyll` file disables Jekyll processing, and the workflow automatically commits refreshed deployment files when the app changes.
 
 Because routing is not used, no SPA rewrite rules or custom 404 page are needed.
 

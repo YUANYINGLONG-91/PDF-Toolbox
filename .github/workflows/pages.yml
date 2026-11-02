@@ -1,4 +1,4 @@
-name: Build and deploy PDF Toolbox Web
+name: Build and publish PDF Toolbox Web
 
 on:
   push:
@@ -9,16 +9,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  publish:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -38,18 +36,17 @@ jobs:
         run: npm test
       - name: Build production site
         run: npm run build
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web/dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish build to the Pages branch root
+        working-directory: .
+        run: |
+          cp -R web/dist/. .
+          touch .nojekyll
+          git add -- index.html assets favicon.svg licenses .nojekyll
+          if git diff --cached --quiet; then
+            echo "Deployed files are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update deployed PDF Toolbox web app"
+          git push

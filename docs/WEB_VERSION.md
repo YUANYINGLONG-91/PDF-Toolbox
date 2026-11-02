@@ -13,7 +13,7 @@ The implemented web edition in `web/` uses one responsive interface for desktop 
 
 ## Deployment
 
-`.github/workflows/pages.yml` runs the unit tests and production build on pushes to `main` that change the web app. It uploads `web/dist/` and deploys with GitHub Pages actions. In the repository, select **Settings → Pages → Build and deployment → Source → GitHub Actions**. The workflow can also be started manually with **Run workflow**.
+`.github/workflows/pages.yml` runs the unit tests and production build on pushes to `main` that change the web app. It copies `web/dist/` to the `main` branch root and commits the refreshed deployment files. The repository uses **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `/ (root)`**; `.nojekyll` disables Jekyll processing. The workflow can also be started manually with **Run workflow**.
 
 ## Verification and limitations
 

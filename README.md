@@ -65,4 +65,4 @@ npm run test:browser
 npm run build
 ```
 
-The production site is generated in `web/dist/`. Relative asset URLs support GitHub Pages project sites. The workflow in `.github/workflows/pages.yml` tests and builds the site, then deploys it to GitHub Pages after a push to `main` when **Settings → Pages → Source** is set to **GitHub Actions**. See `web/README.md` for usage, testing, privacy, and limitations.
+The production site is generated in `web/dist/`. Relative asset URLs support GitHub Pages project sites. This repository publishes from the `main` branch root (`/(root)`); `.nojekyll` disables Jekyll processing. The workflow in `.github/workflows/pages.yml` tests and builds the site after changes to `web/`, then commits refreshed copies of `index.html`, `assets/`, `favicon.svg`, and `licenses/` to that publishing root. See `web/README.md` for usage, testing, privacy, and limitations.
