@@ -1,0 +1,200 @@
+const en = {
+  brandTag: 'SCAN STUDIO',
+  private: 'On-device only',
+  eyebrow: 'YOUR PRIVATE SCAN STUDIO',
+  heroTitle: 'Paper in.<br><em>Polished PDF out.</em>',
+  heroBody: 'Clean up document photos, straighten every page, and create a beautiful PDF — right in your browser.',
+  noUploads: 'No uploads',
+  noAccount: 'No account',
+  free: 'Completely free',
+  startScan: 'START A NEW SCAN',
+  dropTitle: 'Drop your document photos',
+  dropBody: 'or choose images from your device',
+  chooseImages: 'Choose images',
+  fileTypes: 'JPG, PNG or WEBP · Multiple images welcome',
+  localTitle: 'Your documents stay yours.',
+  localBody: 'Processing happens locally. Nothing is uploaded or saved.',
+  step1Title: 'Add your pages',
+  step1Body: 'Import and arrange images',
+  step2Title: 'Make them crisp',
+  step2Body: 'Crop, straighten and enhance',
+  step3Title: 'Download your PDF',
+  step3Body: 'One file, ready to share',
+  workspaceTag: 'SCAN WORKSPACE',
+  workspaceTitle: 'Make every page shine.',
+  addPages: 'Add pages',
+  startOver: 'Start over',
+  pages: 'Pages',
+  reorderHint: 'Drag to reorder, or use the arrows.',
+  addMore: 'Add more pages',
+  crop: 'Crop',
+  result: 'Result',
+  cropHelp: 'Drag the four corner handles to match the document edges.',
+  rotateLeft: 'Rotate left',
+  rotateRight: 'Rotate right',
+  autoCrop: 'Auto crop',
+  resetCrop: 'Reset crop',
+  enhance: 'Enhance',
+  enhanceHint: 'Clean backgrounds and sharpen handwriting.',
+  color: 'Color',
+  grayscale: 'Gray',
+  bw: 'B&W',
+  detailBoost: 'Detail boost',
+  natural: 'Natural',
+  crisp: 'Crisp',
+  handwriting: 'Optimized for clear handwriting',
+  exportPdf: 'Export PDF',
+  filename: 'File name',
+  pageSize: 'Page size',
+  a4auto: 'A4 · Auto orientation',
+  letterAuto: 'Letter · Auto orientation',
+  matchImage: 'Match image',
+  downloadPdf: 'Download PDF',
+  exportPrivacy: 'Created on your device. Never uploaded.',
+  footerTag: 'Thoughtful tools for paperless work.',
+  footerLocal: '100% local processing',
+  processing: 'Processing locally…',
+  loadingEngine: 'Loading the local scan engine…',
+  detecting: 'Finding document edges…',
+  edgesFound: 'Edges found · adjust if needed',
+  manualCrop: 'Manual crop · drag the corners',
+  fullFrame: 'Full frame · drag corners to crop',
+  page: 'Page',
+  of: 'of',
+  moveUp: 'Move page earlier',
+  moveDown: 'Move page later',
+  pageOptions: 'Select page',
+  invalidImages: 'Please choose JPG, PNG, WEBP, or another browser-supported image.',
+  importError: 'Some images could not be opened. Try exporting them as JPG or PNG.',
+  importSuccess: 'pages added. Your images never left this device.',
+  importSuccessOne: 'page added. Your image never left this device.',
+  detectFailed: 'No clear edges found. Drag the corner handles to crop manually.',
+  engineFailed: 'The local scan engine could not start. You can still arrange pages; reload to try enhancement again.',
+  deleteConfirm: 'Delete this page from the scan?',
+  startOverConfirm: 'Start over and remove all pages? Your original images will not be changed.',
+  preparing: 'Preparing page',
+  creatingPdf: 'Finishing your PDF…',
+  downloadReady: 'Your PDF is ready.',
+  exportError: 'Could not create the PDF. Try fewer or smaller images, then export again.',
+  emptyFilename: 'Scanned document',
+  imageAlt: 'Selected document page',
+  resultAlt: 'Enhanced document preview',
+};
+
+const zh: Record<keyof typeof en, string> = {
+  brandTag: '扫描工作室',
+  private: '仅在设备端处理',
+  eyebrow: '您的私密扫描工作室',
+  heroTitle: '纸张入镜。<br><em>精美 PDF 出炉。</em>',
+  heroBody: '清理文档照片、校正每一页，并直接在浏览器中制作精美的 PDF。',
+  noUploads: '绝不上传',
+  noAccount: '无需账户',
+  free: '完全免费',
+  startScan: '开始新的扫描',
+  dropTitle: '将文档照片拖到这里',
+  dropBody: '或从设备中选择图片',
+  chooseImages: '选择图片',
+  fileTypes: '支持 JPG、PNG 或 WEBP · 可一次选择多张',
+  localTitle: '文档始终属于您。',
+  localBody: '所有处理均在本地完成，不上传也不保存。',
+  step1Title: '添加页面',
+  step1Body: '导入并排列图片',
+  step2Title: '让文字更清晰',
+  step2Body: '裁剪、校正与增强',
+  step3Title: '下载 PDF',
+  step3Body: '一个文件，随时分享',
+  workspaceTag: '扫描工作区',
+  workspaceTitle: '让每一页都清晰出色。',
+  addPages: '添加页面',
+  startOver: '重新开始',
+  pages: '页面',
+  reorderHint: '拖动排序，或使用箭头调整。',
+  addMore: '添加更多页面',
+  crop: '裁剪',
+  result: '效果',
+  cropHelp: '拖动四个角点，使其与文档边缘对齐。',
+  rotateLeft: '向左旋转',
+  rotateRight: '向右旋转',
+  autoCrop: '自动裁剪',
+  resetCrop: '重置裁剪',
+  enhance: '图像增强',
+  enhanceHint: '净化背景，锐化手写笔迹。',
+  color: '彩色',
+  grayscale: '灰度',
+  bw: '黑白',
+  detailBoost: '细节增强',
+  natural: '自然',
+  crisp: '清晰',
+  handwriting: '针对清晰手写文字优化',
+  exportPdf: '导出 PDF',
+  filename: '文件名',
+  pageSize: '页面大小',
+  a4auto: 'A4 · 自动方向',
+  letterAuto: 'Letter · 自动方向',
+  matchImage: '匹配图片',
+  downloadPdf: '下载 PDF',
+  exportPrivacy: '在您的设备上生成，绝不上传。',
+  footerTag: '为无纸化工作而生。',
+  footerLocal: '100% 本地处理',
+  processing: '正在本地处理…',
+  loadingEngine: '正在加载本地扫描引擎…',
+  detecting: '正在查找文档边缘…',
+  edgesFound: '已找到边缘 · 可继续微调',
+  manualCrop: '手动裁剪 · 拖动角点',
+  fullFrame: '完整画面 · 拖动角点裁剪',
+  page: '第',
+  of: '页，共',
+  moveUp: '向前移动页面',
+  moveDown: '向后移动页面',
+  pageOptions: '选择页面',
+  invalidImages: '请选择 JPG、PNG、WEBP 或浏览器支持的其他图片。',
+  importError: '部分图片无法打开。请尝试将其转换为 JPG 或 PNG。',
+  importSuccess: '页已添加。图片始终保留在此设备上。',
+  importSuccessOne: '页已添加。图片始终保留在此设备上。',
+  detectFailed: '未找到清晰边缘。请拖动角点手动裁剪。',
+  engineFailed: '本地扫描引擎无法启动。仍可排列页面；请刷新后重试增强功能。',
+  deleteConfirm: '从扫描文档中删除此页？',
+  startOverConfirm: '重新开始并移除所有页面？原始图片不会被更改。',
+  preparing: '正在处理第',
+  creatingPdf: '正在完成 PDF…',
+  downloadReady: 'PDF 已准备好。',
+  exportError: '无法创建 PDF。请减少页面或使用较小的图片后重试。',
+  emptyFilename: '扫描文档',
+  imageAlt: '所选文档页面',
+  resultAlt: '增强后的文档预览',
+};
+
+export type Language = 'en' | 'zh';
+export type TranslationKey = keyof typeof en;
+let current: Language = 'en';
+
+export function setLanguage(language: Language): void {
+  current = language;
+  const strings = language === 'zh' ? zh : en;
+  document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
+  document.title = language === 'zh' ? 'PDF Toolbox — 私密扫描工作室' : 'PDF Toolbox — Private Scan Studio';
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach((element) => {
+    const key = element.dataset.i18n as TranslationKey;
+    if (!(key in strings)) return;
+    if (key === 'heroTitle') element.innerHTML = strings[key];
+    else element.textContent = strings[key];
+  });
+  const label = document.querySelector<HTMLElement>('#languageLabel');
+  const button = document.querySelector<HTMLButtonElement>('#languageButton');
+  if (label) label.textContent = language === 'zh' ? 'English' : '简体中文';
+  if (button) button.setAttribute('aria-label', language === 'zh' ? 'Switch to English' : '切换到简体中文');
+  const dropzone = document.querySelector<HTMLElement>('#dropzone');
+  dropzone?.setAttribute('aria-label', language === 'zh' ? '选择文档图片或将图片拖到这里' : 'Choose document images or drop them here');
+  const cropImage = document.querySelector<HTMLImageElement>('#cropImage');
+  const resultImage = document.querySelector<HTMLImageElement>('#resultImage');
+  if (cropImage) cropImage.alt = strings.imageAlt;
+  if (resultImage) resultImage.alt = strings.resultAlt;
+}
+
+export function getLanguage(): Language {
+  return current;
+}
+
+export function t(key: TranslationKey): string {
+  return (current === 'zh' ? zh : en)[key];
+}
