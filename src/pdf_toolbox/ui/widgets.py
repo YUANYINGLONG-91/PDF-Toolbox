@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -13,14 +13,49 @@ from pdf_toolbox.core.image_pdf import IMAGE_SUFFIXES
 from pdf_toolbox.i18n import tr as _
 
 
+def create_page_layout(page: QWidget) -> QVBoxLayout:
+    """Create the common content rhythm used by every tool page."""
+    layout = QVBoxLayout(page)
+    layout.setContentsMargins(28, 24, 28, 24)
+    layout.setSpacing(12)
+    return layout
+
+
+def add_page_header(layout: QVBoxLayout, title: str, description: str) -> QLabel:
+    heading = QLabel(title)
+    heading.setObjectName("pageTitle")
+    layout.addWidget(heading)
+    detail = QLabel(description)
+    detail.setObjectName("pageDescription")
+    detail.setWordWrap(True)
+    layout.addWidget(detail)
+    layout.addSpacing(8)
+    return heading
+
+
+def add_primary_action(layout: QVBoxLayout, button: QPushButton) -> None:
+    """Place a page's main action consistently at the lower right of its card."""
+    button.setObjectName("primaryButton")
+    button.setMinimumHeight(42)
+    button.setMinimumWidth(150)
+    row = QHBoxLayout()
+    row.addStretch()
+    row.addWidget(button)
+    layout.addLayout(row)
+
+
 class FileDropList(QListWidget):
     pathsDropped = Signal(list)
 
     def __init__(self):
         super().__init__()
+        self.setObjectName("fileList")
         self.setAcceptDrops(True)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.setIconSize(self.iconSize().expandedTo(self.iconSize() * 2))
+        self.setIconSize(QSize(40, 40))
+        self.setSpacing(3)
+        self.setMinimumHeight(150)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -52,13 +87,17 @@ class FileListPanel(QWidget):
         self.suffixes = {suffix.lower() for suffix in suffixes}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(QLabel(title))
+        layout.setSpacing(10)
+        title_label = QLabel(title)
+        title_label.setObjectName("sectionTitle")
+        title_label.setWordWrap(True)
+        layout.addWidget(title_label)
         self.list = FileDropList()
         self.list.pathsDropped.connect(self.add_paths)
         layout.addWidget(self.list, 1)
         buttons = QGridLayout()
-        buttons.setHorizontalSpacing(7)
-        buttons.setVerticalSpacing(7)
+        buttons.setHorizontalSpacing(8)
+        buttons.setVerticalSpacing(8)
         controls = [
             ("Add files", self.browse), ("Remove", self.remove_selected),
             ("Clear", self.clear), ("Move up", lambda: self.move_selected(-1)),
@@ -125,6 +164,7 @@ class FilePicker(QWidget):
         self.file_filter = file_filter
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         self.edit = QLineEdit()
         self.edit.setPlaceholderText("Select a file…")
         browse = QPushButton("Browse…")
@@ -150,6 +190,7 @@ class OutputPicker(QWidget):
         self.customized = False
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
         self.edit = QLineEdit(default_path)
         self.edit.textEdited.connect(self._edited)
         self.browse_button = QPushButton(browse_label)

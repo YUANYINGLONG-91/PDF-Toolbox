@@ -39,9 +39,10 @@ jobs:
       - name: Publish build to the Pages branch root
         working-directory: .
         run: |
+          rm -rf -- assets licenses fonts pdfjs tesseract
           cp -R web/dist/. .
           touch .nojekyll
-          git add -- index.html assets favicon.svg licenses .nojekyll
+          git add -- index.html assets favicon.svg licenses fonts pdfjs tesseract .nojekyll
           if git diff --cached --quiet; then
             echo "Deployed files are already current."
             exit 0

@@ -21,3 +21,4 @@ secrets.json
 credentials.json
 web/node_modules/
 web/dist/
+web/test-output/

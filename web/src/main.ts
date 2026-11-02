@@ -5,6 +5,7 @@ import { drawRotated, normalizeImage } from './image';
 import { detectDocument, loadOpenCv, renderPage } from './opencv';
 import { createPdf, sanitizePdfFilename } from './pdf';
 import { getLanguage, setLanguage, t, type Language } from './i18n';
+import { refreshToolLanguage, setupToolNavigation } from './tools';
 
 function element<T extends Element = HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -68,6 +69,27 @@ let draggedPageId = '';
 let activeCorner: number | null = null;
 const thumbnailTimers = new Map<string, number>();
 const thumbnailRequests = new Map<string, number>();
+
+function activeToolIsScanner(): boolean {
+  return document.querySelector('[data-tool="scan"]')?.classList.contains('active') ?? true;
+}
+
+const utilityView = element('utilityView');
+const scanObserver = new MutationObserver(() => {
+  if (activeToolIsScanner() && !utilityView.hidden && (!ui.welcome.hidden || !ui.workspace.hidden)) utilityView.hidden = true;
+});
+scanObserver.observe(ui.welcome, { attributes: true, attributeFilter: ['hidden'] });
+scanObserver.observe(ui.workspace, { attributes: true, attributeFilter: ['hidden'] });
+
+setupToolNavigation({
+  showScan: () => renderWorkspace(),
+  showUtility: () => {
+    ui.welcome.hidden = true;
+    ui.workspace.hidden = true;
+    utilityView.hidden = false;
+  },
+  notify: showToast,
+});
 
 function selectedPage(): ScanPage | undefined {
   return pages.find((page) => page.id === selectedId);
@@ -692,6 +714,7 @@ element('languageButton').addEventListener('click', () => {
   const next: Language = getLanguage() === 'en' ? 'zh' : 'en';
   try { localStorage.setItem('pdf-toolbox-language', next); } catch { /* Private browsing can disable storage. */ }
   setLanguage(next);
+  refreshToolLanguage();
   if (pages.length) {
     renderPageList();
     const page = selectedPage();
@@ -715,4 +738,5 @@ try {
   if (saved === 'zh' || (!saved && navigator.language.toLowerCase().startsWith('zh'))) initialLanguage = 'zh';
 } catch { /* Language preference is optional. */ }
 setLanguage(initialLanguage);
+refreshToolLanguage();
 renderWorkspace();

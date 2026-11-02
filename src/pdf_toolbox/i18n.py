@@ -196,6 +196,20 @@ ZH_CN = {
     "Output (*.pdf)": "输出 (*.pdf)",
     "Output (*.docx)": "输出 (*.docx)",
     "Files are processed locally. No document upload or telemetry is used.": "文件均在本地处理，不上传文档，也不使用遥测。",
+    "LOCAL DOCUMENT TOOLS": "本地文档工具",
+    "TOOLS": "工具",
+    "Find a tool…": "查找工具…",
+    "No matching tools": "未找到匹配的工具",
+    "LOCAL & PRIVATE": "本地处理 · 隐私保护",
+    "Your documents never leave this computer.": "文档始终保留在此电脑上。",
+    "ACTIVITY": "任务状态",
+    "Manage default output and language preferences, and review local processing engines.": "管理默认输出和语言首选项，并查看本地处理引擎。",
+    "Options": "选项",
+    "Add and arrange images": "添加并整理图片",
+    "Output settings": "输出设置",
+    "Combine PDFs into one document or split selected page groups into new files.": "将多个 PDF 合并为一个文档，或按页面组拆分为新文件。",
+    "Output folder": "输出文件夹",
+    "Pages": "页面",
 }
 
 
@@ -234,7 +248,10 @@ def translate_ui(root: QWidget) -> None:
                 widget.setItemText(index, tr(widget.itemText(index)))
         if isinstance(widget, QListWidget):
             for index in range(widget.count()):
-                widget.item(index).setText(tr(widget.item(index).text()))
+                item = widget.item(index)
+                item.setText(tr(item.text()))
+                if item.toolTip():
+                    item.setToolTip(tr(item.toolTip()))
         if isinstance(widget, QTabWidget):
             for index in range(widget.count()):
                 widget.setTabText(index, tr(widget.tabText(index)))

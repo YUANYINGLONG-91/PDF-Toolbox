@@ -58,18 +58,33 @@ class ScanCanvas(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(38, 42, 48))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor(23, 33, 49))
+        painter.setPen(QPen(QColor(44, 58, 77), 1))
+        painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
         if self.pixmap.isNull():
-            painter.setPen(QColor(210, 210, 210))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, _("Add photos using the panel on the left"))
+            center = self.rect().center()
+            document = QRectF(center.x() - 29, center.y() - 75, 58, 72)
+            painter.setPen(QPen(QColor(83, 108, 139), 1.5))
+            painter.setBrush(QColor(29, 43, 63))
+            painter.drawRoundedRect(document, 5, 5)
+            painter.setPen(QPen(QColor(83, 108, 139), 2))
+            for offset in (20, 32, 44):
+                painter.drawLine(
+                    QPointF(document.left() + 12, document.top() + offset),
+                    QPointF(document.right() - 12, document.top() + offset),
+                )
+            painter.setPen(QColor(183, 197, 214))
+            painter.drawText(self.rect().adjusted(16, 52, -16, 0), Qt.AlignmentFlag.AlignCenter, _("Add photos using the panel on the left"))
             return
         rect = self._rect()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.drawPixmap(rect, self.pixmap, QRectF(self.pixmap.rect()))
         polygon = QPolygonF([self._to_widget(point) for point in self.corners])
-        painter.setPen(QPen(QColor(30, 190, 255), 3))
-        painter.setBrush(QColor(30, 190, 255, 28))
+        painter.setPen(QPen(QColor(91, 141, 239), 2.5))
+        painter.setBrush(QColor(47, 111, 237, 32))
         painter.drawPolygon(polygon)
+        painter.setPen(QPen(QColor(47, 111, 237), 2))
         painter.setBrush(QColor(255, 255, 255))
         for point in polygon:
             painter.drawEllipse(point, 8, 8)

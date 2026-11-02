@@ -8,8 +8,8 @@ import numpy as np
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QSplitter, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFrame, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QSplitter, QVBoxLayout, QWidget,
 )
 
 from pdf_toolbox.core.image_pdf import IMAGE_SUFFIXES, images_to_pdf
@@ -25,7 +25,9 @@ from pdf_toolbox.i18n import tr as _
 from pdf_toolbox.models import JobResult
 from pdf_toolbox.settings import default_output_dir
 from pdf_toolbox.ui.scan_canvas import ScanCanvas
-from pdf_toolbox.ui.widgets import FileListPanel, OutputPicker
+from pdf_toolbox.ui.widgets import (
+    FileListPanel, OutputPicker, add_page_header, create_page_layout,
+)
 
 SCAN_OBJECT_ROLE = Qt.ItemDataRole.UserRole + 1
 
@@ -58,89 +60,115 @@ class ScanPage(QWidget):
         super().__init__()
         self.host = host
         self.loading = False
-        root = QVBoxLayout(self)
-        root.setContentsMargins(18, 16, 18, 14)
-        root.setSpacing(10)
-        title = QLabel(_("Document Photo Scanner"))
-        title.setObjectName("pageTitle")
-        root.addWidget(title)
-        instructions = QLabel(_("Add and arrange photos on the left. Correct and preview on the right. Export below the preview."))
-        instructions.setWordWrap(True)
-        root.addWidget(instructions)
+        root = create_page_layout(self)
+        add_page_header(
+            root,
+            _("Document Photo Scanner"),
+            _("Add and arrange photos on the left. Correct and preview on the right. Export below the preview."),
+        )
         splitter = QSplitter()
+        splitter.setChildrenCollapsible(False)
         root.addWidget(splitter, 1)
 
-        left_panel = QWidget()
+        left_panel = QFrame()
+        left_panel.setObjectName("card")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setContentsMargins(14, 16, 14, 14)
         self.files = FileListPanel(_("1. Add and arrange photos (or drag them here)"), "Images (*.jpg *.jpeg *.png *.tif *.tiff *.bmp *.webp)", IMAGE_SUFFIXES)
         self.files.pathsAdded.connect(self._add_documents)
         self.files.list.currentRowChanged.connect(self._show_current)
         left_layout.addWidget(self.files, 1)
-        left_panel.setMinimumWidth(310)
-        left_panel.setMaximumWidth(410)
+        left_panel.setMinimumWidth(300)
+        left_panel.setMaximumWidth(385)
         splitter.addWidget(left_panel)
 
         editor = QGroupBox(_("Correct and preview the selected page"))
+        editor.setObjectName("editorCard")
         editor_layout = QVBoxLayout(editor)
-        self.canvas = ScanCanvas()
-        self.canvas.setMinimumSize(320, 260)
-        self.canvas.cornersChanged.connect(self._corners_changed)
-        editor_layout.addWidget(self.canvas, 3)
+        editor_layout.setSpacing(7)
         controls = QHBoxLayout()
+        controls.setSpacing(8)
         for text, handler in [("Rotate left", lambda: self.rotate(False)), ("Rotate right", lambda: self.rotate(True)), ("Detect edges", self.redetect)]:
             button = QPushButton(_(text))
             button.clicked.connect(handler)
             controls.addWidget(button)
-        controls.addWidget(QLabel(_("Enhancement")))
+        controls.addStretch()
+        editor_layout.addLayout(controls)
+
+        previews = QHBoxLayout()
+        previews.setSpacing(12)
+        self.canvas = ScanCanvas()
+        self.canvas.setMinimumSize(260, 170)
+        self.canvas.cornersChanged.connect(self._corners_changed)
+        self.canvas.setToolTip(_("Drag the four corner handles to match the document edges."))
+        previews.addWidget(self.canvas, 3)
+        self.result_preview = QLabel(_("Corrected preview"))
+        self.result_preview.setObjectName("previewSurface")
+        self.result_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.result_preview.setMinimumSize(230, 170)
+        previews.addWidget(self.result_preview, 2)
+        editor_layout.addLayout(previews, 1)
+
+        options_bar = QFrame()
+        options_bar.setObjectName("optionsBar")
+        options_layout = QVBoxLayout(options_bar)
+        options_layout.setContentsMargins(12, 10, 12, 10)
+        options_layout.setSpacing(9)
+        enhancement_row = QHBoxLayout()
+        enhancement_row.setSpacing(8)
+        enhancement_row.addWidget(QLabel(_("Enhancement")))
         self.mode = QComboBox()
         for label, value in [("Enhanced color", "color"), ("Original color", "original"), ("Grayscale", "grayscale"), ("Black & white", "bw")]:
             self.mode.addItem(_(label), value)
+        self.mode.setFixedWidth(155)
         self.mode.setToolTip(_("Enhanced color flattens shadows, whitens paper, preserves color, and sharpens handwriting."))
         self.mode.currentIndexChanged.connect(self._mode_changed)
-        controls.addWidget(self.mode)
-        editor_layout.addLayout(controls)
-
-        correction_options = QHBoxLayout()
-        self.deskew = QCheckBox(_("Automatically straighten text after perspective correction"))
-        self.deskew.setChecked(True)
-        self.deskew.toggled.connect(lambda: self.preview_timer.start())
-        correction_options.addWidget(self.deskew)
-        correction_options.addStretch()
-        correction_options.addWidget(QLabel(_("Text sharpness")))
+        enhancement_row.addWidget(self.mode, 1)
+        enhancement_row.addSpacing(8)
+        enhancement_row.addWidget(QLabel(_("Text sharpness")))
         self.sharpness = QComboBox()
         self.sharpness.addItem(_("Standard"), 1.0)
         self.sharpness.addItem(_("Strong (handwriting)"), 1.55)
         self.sharpness.setCurrentIndex(1)
+        self.sharpness.setFixedWidth(190)
         self.sharpness.setToolTip(_("Strong enhances faint handwriting and stroke edges. Standard is gentler for photos and illustrations."))
         self.sharpness.currentIndexChanged.connect(lambda: self.preview_timer.start())
-        correction_options.addWidget(self.sharpness)
-        editor_layout.addLayout(correction_options)
+        enhancement_row.addWidget(self.sharpness, 1)
+        options_layout.addLayout(enhancement_row)
+        self.deskew = QCheckBox(_("Automatically straighten text after perspective correction"))
+        self.deskew.setChecked(True)
+        self.deskew.toggled.connect(lambda: self.preview_timer.start())
+        options_layout.addWidget(self.deskew)
+        editor_layout.addWidget(options_bar)
         self.status = QLabel(_("Drag the four corner handles to match the document edges."))
+        self.status.setObjectName("helperText")
         self.status.setWordWrap(True)
         editor_layout.addWidget(self.status)
-        self.result_preview = QLabel(_("Corrected preview"))
-        self.result_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.result_preview.setMinimumHeight(140)
-        self.result_preview.setStyleSheet("background: #262a30; color: #ddd; border: 1px solid #454c55;")
-        editor_layout.addWidget(self.result_preview, 2)
 
         export_group = QGroupBox(_("Export PDF"))
         export_layout = QVBoxLayout(export_group)
-        export_layout.setSpacing(7)
+        export_layout.setContentsMargins(9, 0, 9, 0)
+        export_layout.setSpacing(6)
         self.ocr = QCheckBox(_("Searchable PDF (Chinese + English OCR)"))
         self.ocr.setChecked(True)
-        export_layout.addWidget(self.ocr)
-        form = QFormLayout()
-        form.setHorizontalSpacing(10)
-        form.setVerticalSpacing(7)
+        fields_row = QHBoxLayout()
+        fields_row.setSpacing(12)
+        filename_column = QVBoxLayout()
+        filename_column.setSpacing(6)
+        filename_column.addWidget(QLabel(_("File name")))
         self.filename = QLineEdit("scanned.pdf")
         self.filename.setPlaceholderText(_("Enter a PDF file name"))
-        form.addRow(_("File name"), self.filename)
+        filename_column.addWidget(self.filename)
+        fields_row.addLayout(filename_column, 2)
+        output_column = QVBoxLayout()
+        output_column.setSpacing(6)
+        output_column.addWidget(QLabel(_("Save to")))
         self.output_directory = OutputPicker(str(default_output_dir()), directory=True, browse_label=_("Choose folder…"))
-        form.addRow(_("Save to"), self.output_directory)
-        export_layout.addLayout(form)
+        output_column.addWidget(self.output_directory)
+        fields_row.addLayout(output_column, 3)
+        export_layout.addLayout(fields_row)
         button_row = QHBoxLayout()
+        button_row.addWidget(self.ocr)
         button_row.addStretch()
         self.export_button = QPushButton(_("Create PDF from Photos"))
         self.export_button.setObjectName("primaryButton")
@@ -151,7 +179,7 @@ class ScanPage(QWidget):
         editor_layout.addWidget(export_group)
 
         splitter.addWidget(editor)
-        splitter.setSizes([350, 850])
+        splitter.setSizes([330, 850])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
 

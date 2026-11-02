@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f4ee" />
-    <meta name="description" content="Turn photos into clean, polished PDFs. Private, browser-based document scanning with no uploads." />
+    <meta name="description" content="Private browser-based document tools: scan photos, OCR, convert PDF and Word files, merge, split, organize, compress and render PDFs — without uploads." />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>PDF Toolbox — Private Scan Studio</title>
-    <script type="module" crossorigin src="./assets/index-DjLBGBdd.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BydDJV8t.css">
+    <title>PDF Toolbox — Private Document Studio</title>
+    <script type="module" crossorigin src="./assets/index-3OpsH8_j.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-KEaFOx-R.css">
   </head>
   <body>
     <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -52,6 +52,19 @@
     <div id="globalProgress" class="global-progress" hidden><span></span></div>
 
     <main>
+      <nav class="tool-nav" aria-label="Document tools">
+        <button class="tool-nav-button active" data-tool="scan" type="button"><svg><use href="#i-scan"/></svg><span data-i18n="navScan">Photo scanner</span></button>
+        <button class="tool-nav-button" data-tool="images" type="button"><svg><use href="#i-image"/></svg><span data-i18n="navImages">Images to PDF</span></button>
+        <button class="tool-nav-button" data-tool="ocr" type="button"><svg><use href="#i-sparkles"/></svg><span data-i18n="navOcr">OCR PDF</span></button>
+        <button class="tool-nav-button" data-tool="pdf-word" type="button"><svg><use href="#i-file"/></svg><span data-i18n="navPdfWord">PDF to Word</span></button>
+        <button class="tool-nav-button" data-tool="word-pdf" type="button"><svg><use href="#i-file"/></svg><span data-i18n="navWordPdf">Word to PDF</span></button>
+        <button class="tool-nav-button" data-tool="merge" type="button"><svg><use href="#i-plus"/></svg><span data-i18n="navMerge">Merge</span></button>
+        <button class="tool-nav-button" data-tool="split" type="button"><svg><use href="#i-crop"/></svg><span data-i18n="navSplit">Split</span></button>
+        <button class="tool-nav-button" data-tool="organize" type="button"><svg><use href="#i-grip"/></svg><span data-i18n="navOrganize">Organize</span></button>
+        <button class="tool-nav-button" data-tool="compress" type="button"><svg><use href="#i-download"/></svg><span data-i18n="navCompress">Compress</span></button>
+        <button class="tool-nav-button" data-tool="render" type="button"><svg><use href="#i-image"/></svg><span data-i18n="navRender">PDF to images</span></button>
+      </nav>
+
       <section id="welcome" class="welcome">
         <div class="hero-copy">
           <div class="eyebrow"><span></span><span data-i18n="eyebrow">YOUR PRIVATE SCAN STUDIO</span></div>
@@ -168,6 +181,44 @@
               <p id="exportStatus" class="export-status" aria-live="polite"></p>
               <p class="export-privacy"><svg><use href="#i-shield"/></svg><span data-i18n="exportPrivacy">Created on your device. Never uploaded.</span></p>
             </section>
+          </aside>
+        </div>
+      </section>
+
+      <section id="utilityView" class="utility-view" hidden>
+        <div class="utility-heading">
+          <div class="eyebrow"><span></span><span id="utilityEyebrow">LOCAL DOCUMENT TOOLKIT</span></div>
+          <h1 id="utilityTitle">Document tool</h1>
+          <p id="utilitySubtitle"></p>
+        </div>
+        <div class="utility-grid">
+          <section class="panel utility-panel">
+            <div id="utilityDrop" class="utility-drop" role="button" tabindex="0">
+              <div class="upload-orbit"><svg><use href="#i-upload"/></svg></div>
+              <h2 id="utilityDropTitle">Choose your files</h2>
+              <p id="utilityDropBody">or drop them here</p>
+              <button id="utilityChoose" class="button button-primary" type="button"><svg><use href="#i-plus"/></svg><span id="utilityChooseText">Choose files</span></button>
+              <small id="utilityAccept"></small>
+            </div>
+            <input id="utilityFiles" type="file" hidden />
+            <div id="utilityFileList" class="utility-file-list"></div>
+            <div id="organizerPreview" class="organizer-preview" hidden></div>
+            <div id="utilityOptions" class="utility-options"></div>
+            <label id="utilityFilenameLabel" class="field-label" for="utilityFilename">Output file name</label>
+            <div class="filename-field utility-filename"><input id="utilityFilename" type="text" maxlength="120" autocomplete="off" /><span id="utilityExtension">.pdf</span></div>
+            <button id="utilityRun" class="button button-export utility-run" type="button"><svg><use href="#i-download"/></svg><span id="utilityRunText">Create file</span></button>
+            <div id="utilityProgressWrap" class="utility-progress" hidden>
+              <progress id="utilityProgress" max="1" value="0"></progress>
+              <span id="utilityProgressText"></span>
+            </div>
+            <p id="utilityStatus" class="utility-status" role="status" aria-live="polite"></p>
+          </section>
+          <aside class="panel utility-side">
+            <span class="utility-side-icon"><svg><use href="#i-shield"/></svg></span>
+            <h2 id="utilitySideTitle">Private by design</h2>
+            <p id="utilityDescription"></p>
+            <ul id="utilityNotes"></ul>
+            <div class="utility-local-note"><span class="status-dot"></span><span id="utilityLocalNote">Your files are processed in this browser and never uploaded.</span></div>
           </aside>
         </div>
       </section>

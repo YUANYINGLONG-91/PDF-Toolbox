@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QSize, QUrl, Qt
 from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QListWidget,
-    QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSplitter, QStackedWidget, QVBoxLayout, QWidget,
+    QComboBox, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
+    QProgressBar, QPushButton, QScrollArea, QStackedWidget, QStyle, QVBoxLayout, QWidget,
 )
 
 from pdf_toolbox import __version__
@@ -23,29 +23,9 @@ from pdf_toolbox.ui.pages.basic_pages import (
 )
 from pdf_toolbox.ui.pages.organizer_page import PageOrganizerPage
 from pdf_toolbox.ui.pages.scan_page import ScanPage
-from pdf_toolbox.ui.widgets import OutputPicker
+from pdf_toolbox.ui.theme import STYLE
+from pdf_toolbox.ui.widgets import OutputPicker, add_page_header, create_page_layout
 from pdf_toolbox.workers import JobWorker
-
-STYLE = """
-QWidget { font-family: 'Segoe UI'; font-size: 14px; color: #202733; }
-QMainWindow, QWidget#root { background: #f4f6f9; }
-QLabel#pageTitle { font-size: 26px; font-weight: 650; color: #16283f; margin-bottom: 4px; }
-QListWidget#navigation { background: #14263d; color: #eaf1f8; border: 0; padding: 10px; font-size: 15px; }
-QListWidget#navigation::item { padding: 12px 10px; border-radius: 6px; margin: 2px 0; }
-QListWidget#navigation::item:selected { background: #1976d2; color: white; }
-QListWidget#navigation::item:hover { background: #234463; }
-QLineEdit, QComboBox, QSpinBox, QListWidget, QPlainTextEdit { background: white; border: 1px solid #b9c5d2; border-radius: 5px; padding: 7px; }
-QPushButton { background: #e7ecf2; border: 1px solid #b7c4d2; border-radius: 5px; padding: 8px 13px; }
-QPushButton:hover { background: #dce6f1; }
-QPushButton#primaryButton { background: #1976d2; color: white; border: 0; font-size: 15px; font-weight: 650; padding: 11px 18px; }
-QPushButton#primaryButton:hover { background: #1264b3; }
-QPushButton:disabled { color: #8c97a5; background: #e2e5e9; }
-QGroupBox { background: white; border: 1px solid #ccd4de; border-radius: 7px; margin-top: 11px; padding: 10px; font-weight: 600; }
-QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #16283f; }
-QProgressBar { border: 1px solid #ccd4de; border-radius: 5px; text-align: center; background: white; }
-QProgressBar::chunk { background: #1976d2; }
-QTabWidget::pane { border: 1px solid #d2d9e2; }
-"""
 
 
 class MainWindow(QMainWindow):
@@ -58,22 +38,91 @@ class MainWindow(QMainWindow):
         self.tool_pages: list[QWidget] = []
         self.setWindowTitle("PDF Toolbox")
         self.resize(1280, 840)
+        self.setMinimumSize(1080, 720)
         root = QWidget()
         root.setObjectName("root")
         root.setStyleSheet(STYLE)
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
-        splitter = QSplitter()
-        layout.addWidget(splitter, 1)
+        layout.setSpacing(0)
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        layout.addLayout(body, 1)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(244)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(18, 20, 18, 18)
+        sidebar_layout.setSpacing(12)
+        body.addWidget(sidebar)
+
+        brand = QHBoxLayout()
+        brand.setSpacing(11)
+        mark = QLabel("PDF")
+        mark.setObjectName("brandMark")
+        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark.setFixedSize(43, 43)
+        brand.addWidget(mark)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(1)
+        brand_title = QLabel("PDF Toolbox")
+        brand_title.setObjectName("brandTitle")
+        brand_text.addWidget(brand_title)
+        brand_subtitle = QLabel("LOCAL DOCUMENT TOOLS")
+        brand_subtitle.setObjectName("brandSubtitle")
+        brand_text.addWidget(brand_subtitle)
+        brand.addLayout(brand_text, 1)
+        sidebar_layout.addLayout(brand)
+        sidebar_layout.addSpacing(20)
+
+        navigation_caption = QLabel("TOOLS")
+        navigation_caption.setObjectName("navigationCaption")
+        sidebar_layout.addWidget(navigation_caption)
+        self.navigation_search = QLineEdit()
+        self.navigation_search.setObjectName("navigationSearch")
+        self.navigation_search.setPlaceholderText("Find a tool…")
+        self.navigation_search.setClearButtonEnabled(True)
+        self.navigation_search.textChanged.connect(self._filter_navigation)
+        sidebar_layout.addWidget(self.navigation_search)
+        sidebar_layout.addSpacing(2)
         self.navigation = QListWidget()
         self.navigation.setObjectName("navigation")
-        self.navigation.setMaximumWidth(220)
-        self.navigation.setMinimumWidth(185)
-        splitter.addWidget(self.navigation)
+        self.navigation.setIconSize(QSize(19, 19))
+        self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.navigation.setSpacing(1)
+        sidebar_layout.addWidget(self.navigation, 1)
+        self.navigation_empty = QLabel("No matching tools")
+        self.navigation_empty.setObjectName("privacyCaption")
+        self.navigation_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.navigation_empty.setVisible(False)
+        sidebar_layout.addWidget(self.navigation_empty)
+
+        privacy = QFrame()
+        privacy.setObjectName("privacyPanel")
+        privacy_layout = QVBoxLayout(privacy)
+        privacy_layout.setContentsMargins(12, 11, 12, 11)
+        privacy_layout.setSpacing(4)
+        privacy_title = QLabel("LOCAL & PRIVATE")
+        privacy_title.setObjectName("privacyTitle")
+        privacy_layout.addWidget(privacy_title)
+        privacy_caption = QLabel("Your documents never leave this computer.")
+        privacy_caption.setObjectName("privacyCaption")
+        privacy_caption.setWordWrap(True)
+        privacy_layout.addWidget(privacy_caption)
+        sidebar_layout.addWidget(privacy)
+
+        workspace = QFrame()
+        workspace.setObjectName("workspace")
+        workspace_layout = QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(0)
+        body.addWidget(workspace, 1)
         self.stack = QStackedWidget()
-        splitter.addWidget(self.stack)
-        splitter.setSizes([200, 1080])
+        self.stack.setObjectName("toolStack")
+        workspace_layout.addWidget(self.stack, 1)
 
         self.tool_pages = [
             ScanPage(self), ImagesPDFPage(self), OCRPage(self),
@@ -90,29 +139,62 @@ class MainWindow(QMainWindow):
             ("Page Organizer", self.tool_pages[6]),
             ("Compress PDF", self.tool_pages[7]),
             ("PDF to Images", self.tool_pages[8]),
-            ("Settings & Environment", self._environment_page()),
+            ("Settings", self._environment_page()),
         ]
-        for name, page in pages:
-            self.navigation.addItem(name)
+        icon_names = [
+            QStyle.StandardPixmap.SP_DialogOpenButton,
+            QStyle.StandardPixmap.SP_FileDialogContentsView,
+            QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            QStyle.StandardPixmap.SP_ArrowRight,
+            QStyle.StandardPixmap.SP_DialogSaveButton,
+            QStyle.StandardPixmap.SP_DialogApplyButton,
+            QStyle.StandardPixmap.SP_BrowserReload,
+            QStyle.StandardPixmap.SP_ArrowDown,
+            QStyle.StandardPixmap.SP_DirIcon,
+            QStyle.StandardPixmap.SP_FileDialogInfoView,
+        ]
+        for index, ((name, page), icon_name) in enumerate(zip(pages, icon_names)):
+            item = QListWidgetItem(self.style().standardIcon(icon_name), name)
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            item.setToolTip(name)
+            self.navigation.addItem(item)
             self.stack.addWidget(page)
-        self.navigation.currentRowChanged.connect(self.stack.setCurrentIndex)
+        self.navigation.currentItemChanged.connect(self._show_navigation_page)
         self.navigation.setCurrentRow(0)
 
-        job_panel = QWidget()
+        job_panel = QFrame()
+        job_panel.setObjectName("jobPanel")
         job_layout = QVBoxLayout(job_panel)
-        job_layout.setContentsMargins(14, 8, 14, 10)
+        job_layout.setContentsMargins(18, 11, 18, 13)
+        job_layout.setSpacing(9)
         row = QHBoxLayout()
+        row.setSpacing(9)
+        self.status_dot = QLabel("●")
+        self.status_dot.setObjectName("statusDot")
+        self.status_dot.setFixedWidth(15)
+        row.addWidget(self.status_dot)
+        status_text = QVBoxLayout()
+        status_text.setSpacing(1)
+        activity_caption = QLabel("ACTIVITY")
+        activity_caption.setObjectName("activityCaption")
+        status_text.addWidget(activity_caption)
         self.status = QLabel("Ready — files are processed locally on this computer.")
-        row.addWidget(self.status, 1)
+        self.status.setWordWrap(True)
+        status_text.addWidget(self.status)
+        row.addLayout(status_text, 1)
+        row.addSpacing(8)
         self.open_button = QPushButton("Open output folder")
+        self.open_button.setObjectName("quietButton")
         self.open_button.clicked.connect(self.open_output)
         self.open_button.setEnabled(False)
         row.addWidget(self.open_button)
         self.log_button = QPushButton("Show log")
+        self.log_button.setObjectName("quietButton")
         self.log_button.setCheckable(True)
         self.log_button.toggled.connect(self._toggle_log)
         row.addWidget(self.log_button)
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setObjectName("dangerButton")
         self.cancel_button.clicked.connect(self.cancel_job)
         self.cancel_button.setEnabled(False)
         row.addWidget(self.cancel_button)
@@ -120,29 +202,80 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self.progress.setTextVisible(False)
         job_layout.addWidget(self.progress)
         self.log = QPlainTextEdit()
+        self.log.setObjectName("jobLog")
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
+        self.log.setMinimumHeight(120)
+        self.log.setMaximumHeight(190)
         self.log.setVisible(False)
         job_layout.addWidget(self.log)
-        layout.addWidget(job_panel)
+        workspace_layout.addSpacing(2)
+        workspace_layout.addWidget(job_panel)
+        workspace_layout.setContentsMargins(24, 0, 24, 18)
         translate_ui(self)
+
+    def _show_navigation_page(self, current, previous=None):
+        if current is not None:
+            self.stack.setCurrentIndex(current.data(Qt.ItemDataRole.UserRole))
+
+    def _filter_navigation(self, text):
+        query = text.strip().casefold()
+        first_visible = None
+        for row in range(self.navigation.count()):
+            item = self.navigation.item(row)
+            visible = not query or query in item.text().casefold()
+            item.setHidden(not visible)
+            if visible and first_visible is None:
+                first_visible = item
+        current = self.navigation.currentItem()
+        if (current is None or current.isHidden()) and first_visible is not None:
+            self.navigation.setCurrentItem(first_visible)
+        self.navigation_empty.setVisible(first_visible is None)
+
+    def _set_status_state(self, state: str):
+        self.status_dot.setProperty("state", state)
+        self.status_dot.style().unpolish(self.status_dot)
+        self.status_dot.style().polish(self.status_dot)
 
     def _environment_page(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
-        title = QLabel("Settings & Environment")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
+        layout = create_page_layout(page)
+        add_page_header(
+            layout,
+            "Settings & Environment",
+            "Manage default output and language preferences, and review local processing engines.",
+        )
+        overview = QHBoxLayout()
         version = QLabel(f"PDF Toolbox {__version__}")
-        layout.addWidget(version)
+        version.setObjectName("versionBadge")
+        overview.addWidget(version)
         language_text = _("Current interface language: Simplified Chinese") if self.settings.language == SIMPLIFIED_CHINESE else _("Current interface language: English")
         self.current_language_label = QLabel(language_text)
-        layout.addWidget(self.current_language_label)
+        self.current_language_label.setObjectName("mutedText")
+        overview.addWidget(self.current_language_label)
+        overview.addStretch()
+        layout.addLayout(overview)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("settingsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        content = QWidget()
+        content.setObjectName("settingsContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 4, 5, 4)
+        content_layout.setSpacing(12)
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
 
         preferences = QGroupBox("Settings")
         form = QFormLayout(preferences)
+        form.setHorizontalSpacing(18)
+        form.setVerticalSpacing(12)
         self.default_folder = OutputPicker(
             str(self.settings.output_directory), directory=True, browse_label="Choose folder…"
         )
@@ -153,46 +286,56 @@ class MainWindow(QMainWindow):
         self.language.setCurrentIndex(max(0, self.language.findData(self.settings.language)))
         form.addRow("Interface language", self.language)
         explanation = QLabel("Save settings and use this folder for future default outputs. Existing custom paths are preserved.")
+        explanation.setObjectName("helperText")
         explanation.setWordWrap(True)
         form.addRow(explanation)
         buttons = QHBoxLayout()
+        buttons.addStretch()
+        restore = QPushButton("Restore Defaults")
+        restore.clicked.connect(self.restore_settings_defaults)
+        buttons.addWidget(restore)
         save = QPushButton("Save Settings")
         save.setObjectName("primaryButton")
         save.clicked.connect(self.save_settings)
         buttons.addWidget(save)
-        restore = QPushButton("Restore Defaults")
-        restore.clicked.connect(self.restore_settings_defaults)
-        buttons.addWidget(restore)
-        buttons.addStretch()
         form.addRow(buttons)
-        layout.addWidget(preferences)
+        content_layout.addWidget(preferences)
 
         self.output_summary = QLabel(
             _("Default output folder: {folder}").format(folder=self.settings.output_directory)
         )
+        self.output_summary.setObjectName("helperText")
+        self.output_summary.setWordWrap(True)
         self.output_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.output_summary)
+        content_layout.addWidget(self.output_summary)
 
         engines = QGroupBox("Available local engines")
-        engines_layout = QVBoxLayout(engines)
+        engines_layout = QGridLayout(engines)
+        engines_layout.setHorizontalSpacing(12)
+        engines_layout.setVerticalSpacing(10)
         entries = [
             ("OCRmyPDF", self.caps.ocrmypdf), ("Tesseract", self.caps.tesseract),
             ("Ghostscript", self.caps.ghostscript), ("Microsoft Word", self.caps.word),
             ("Tesseract language data", self.caps.tessdata),
         ]
-        for name, path in entries:
+        for index, (name, path) in enumerate(entries):
             location = str(path) if path else _("Not found")
             label = QLabel(f"<b>{name}</b><br>{location}")
+            label.setObjectName("engineEntry")
+            label.setWordWrap(True)
             label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            engines_layout.addWidget(label)
-        engines_layout.addWidget(QLabel(
+            engines_layout.addWidget(label, index // 2, index % 2)
+        languages = QLabel(
             _("Installed OCR languages: {languages}").format(languages=", ".join(sorted(self.caps.languages)))
-        ))
-        layout.addWidget(engines)
+        )
+        languages.setObjectName("helperText")
+        engines_layout.addWidget(languages, 3, 0, 1, 2)
+        content_layout.addWidget(engines)
         privacy = QLabel("Files are processed locally. No document upload or telemetry is used.")
+        privacy.setObjectName("helperText")
         privacy.setWordWrap(True)
-        layout.addWidget(privacy)
-        layout.addStretch()
+        content_layout.addWidget(privacy)
+        content_layout.addStretch()
         return page
 
     def save_settings(self):
@@ -233,9 +376,11 @@ class MainWindow(QMainWindow):
         self.last_outputs = []
         self.open_button.setEnabled(False)
         self.status.setText(title)
+        self._set_status_state("running")
         self.progress.setValue(0)
         self.stack.setEnabled(False)
         self.navigation.setEnabled(False)
+        self.navigation_search.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.cancel_button.setText(_("Cancel"))
         self.worker = JobWorker(task, self)
@@ -257,22 +402,26 @@ class MainWindow(QMainWindow):
     def _job_done(self):
         self.stack.setEnabled(True)
         self.navigation.setEnabled(True)
+        self.navigation_search.setEnabled(True)
         self.cancel_button.setEnabled(False)
 
     def _succeeded(self, result: JobResult):
         self.last_outputs = result.outputs
         self.status.setText(result.message)
+        self._set_status_state("success")
         self.progress.setValue(100)
         self.open_button.setEnabled(bool(result.outputs))
         self._job_done()
 
     def _failed(self, message):
         self.status.setText(_("Task failed"))
+        self._set_status_state("error")
         self._job_done()
         QMessageBox.critical(self, _("Task failed"), message)
 
     def _cancelled(self):
         self.status.setText(_("Task cancelled — no output was published."))
+        self._set_status_state("cancelled")
         self._job_done()
 
     def _thread_finished(self):

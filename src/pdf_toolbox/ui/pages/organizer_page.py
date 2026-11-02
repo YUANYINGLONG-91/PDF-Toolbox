@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox,
+    QGroupBox, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox,
     QPushButton, QVBoxLayout, QWidget,
 )
 
@@ -13,7 +13,9 @@ from pdf_toolbox.core.pdf_pages import organize_pdf, page_count
 from pdf_toolbox.i18n import tr as _
 from pdf_toolbox.models import JobResult
 from pdf_toolbox.settings import default_output_dir
-from pdf_toolbox.ui.widgets import FilePicker, OutputPicker
+from pdf_toolbox.ui.widgets import (
+    FilePicker, OutputPicker, add_page_header, add_primary_action, create_page_layout,
+)
 
 ORIGINAL_PAGE = Qt.ItemDataRole.UserRole
 ROTATION = Qt.ItemDataRole.UserRole + 1
@@ -23,22 +25,29 @@ class PageOrganizerPage(QWidget):
     def __init__(self, host):
         super().__init__()
         self.host = host
-        layout = QVBoxLayout(self)
-        title = QLabel("PDF Page Organizer")
-        title.setObjectName("pageTitle")
-        layout.addWidget(title)
-        layout.addWidget(QLabel("Rotate, reorder, delete, or keep selected pages. The source PDF is never modified."))
-        row = QHBoxLayout()
+        layout = create_page_layout(self)
+        add_page_header(layout, "PDF Page Organizer", "Rotate, reorder, delete, or keep selected pages. The source PDF is never modified.")
+
+        source_card = QGroupBox("Input file")
+        source_layout = QHBoxLayout(source_card)
+        source_layout.setSpacing(8)
         self.input = FilePicker("PDF files (*.pdf)")
-        row.addWidget(self.input, 1)
+        source_layout.addWidget(self.input, 1)
         load = QPushButton("Load pages")
         load.clicked.connect(self.load_pages)
-        row.addWidget(load)
-        layout.addLayout(row)
+        source_layout.addWidget(load)
+        layout.addWidget(source_card)
+
+        pages_card = QGroupBox("Pages")
+        pages_layout = QVBoxLayout(pages_card)
+        pages_layout.setSpacing(12)
         self.pages = QListWidget()
+        self.pages.setObjectName("pagesList")
         self.pages.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        layout.addWidget(self.pages, 1)
+        self.pages.setAlternatingRowColors(False)
+        pages_layout.addWidget(self.pages, 1)
         controls = QHBoxLayout()
+        controls.setSpacing(8)
         for text, handler in [
             ("Rotate 90°", self.rotate_selected), ("Move up", lambda: self.move_selected(-1)),
             ("Move down", lambda: self.move_selected(1)), ("Delete selected", self.delete_selected),
@@ -48,13 +57,17 @@ class PageOrganizerPage(QWidget):
             button.clicked.connect(handler)
             controls.addWidget(button)
         controls.addStretch()
-        layout.addLayout(controls)
+        pages_layout.addLayout(controls)
+        layout.addWidget(pages_card, 1)
+
+        output_card = QGroupBox("Output file")
+        output_layout = QVBoxLayout(output_card)
         self.output = OutputPicker(str(default_output_dir() / "organized.pdf"), file_filter="PDF files (*.pdf)")
-        layout.addWidget(self.output)
+        output_layout.addWidget(self.output)
         save = QPushButton("Save organized PDF")
-        save.setObjectName("primaryButton")
         save.clicked.connect(self.start)
-        layout.addWidget(save)
+        add_primary_action(output_layout, save)
+        layout.addWidget(output_card)
 
     def set_output_directory(self, folder: Path):
         current_name = self.output.path().name

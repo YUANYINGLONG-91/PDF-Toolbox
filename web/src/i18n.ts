@@ -1,5 +1,15 @@
 const en = {
-  brandTag: 'SCAN STUDIO',
+  brandTag: 'DOCUMENT STUDIO',
+  navScan: 'Photo scanner',
+  navImages: 'Images to PDF',
+  navOcr: 'OCR PDF',
+  navPdfWord: 'PDF to Word',
+  navWordPdf: 'Word to PDF',
+  navMerge: 'Merge',
+  navSplit: 'Split',
+  navOrganize: 'Organize',
+  navCompress: 'Compress',
+  navRender: 'PDF to images',
   private: 'On-device only',
   eyebrow: 'YOUR PRIVATE SCAN STUDIO',
   heroTitle: 'Paper in.<br><em>Polished PDF out.</em>',
@@ -82,7 +92,17 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  brandTag: '扫描工作室',
+  brandTag: '文档工具箱',
+  navScan: '照片扫描',
+  navImages: '图片合并 PDF',
+  navOcr: 'OCR 识别 PDF',
+  navPdfWord: 'PDF 转 Word',
+  navWordPdf: 'Word 转 PDF',
+  navMerge: '合并 PDF',
+  navSplit: '拆分 PDF',
+  navOrganize: '页面管理',
+  navCompress: '压缩 PDF',
+  navRender: 'PDF 转图片',
   private: '仅在设备端处理',
   eyebrow: '您的私密扫描工作室',
   heroTitle: '纸张入镜。<br><em>精美 PDF 出炉。</em>',
@@ -172,7 +192,7 @@ export function setLanguage(language: Language): void {
   current = language;
   const strings = language === 'zh' ? zh : en;
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
-  document.title = language === 'zh' ? 'PDF Toolbox — 私密扫描工作室' : 'PDF Toolbox — Private Scan Studio';
+  document.title = language === 'zh' ? 'PDF Toolbox — 本地文档工具箱' : 'PDF Toolbox — Private Document Studio';
   document.querySelectorAll<HTMLElement>('[data-i18n]').forEach((element) => {
     const key = element.dataset.i18n as TranslationKey;
     if (!(key in strings)) return;

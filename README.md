@@ -1,5 +1,9 @@
 # PDF Toolbox
 
+**Use PDF Toolbox online (desktop and mobile): https://YUANYINGLONG-91.github.io/PDF-Toolbox/**
+
+Source repository: https://github.com/YUANYINGLONG-91/PDF-Toolbox
+
 PDF Toolbox is a local Windows desktop application for document photo cleanup, OCR, document conversion, and common PDF tasks. The interface supports English and Simplified Chinese.
 
 ## Features
@@ -53,16 +57,19 @@ The project uses a private Python 3.12 environment. Core processing is independe
 
 ## Responsive web edition
 
-The `web/` directory contains the responsive browser edition for desktop and mobile. It supports multi-image/album import, touch-friendly page ordering, rotation, automatic or manual four-corner cropping, color/grayscale/black-and-white cleanup, handwriting sharpening, editable PDF filenames, A4/Letter/image-sized pages, and local PDF download. It deliberately has no camera-capture requirement.
+**Open the web app:** https://YUANYINGLONG-91.github.io/PDF-Toolbox/
 
-Images are processed locally in the browser. OpenCV.js and pdf-lib are bundled with the static site; there are no document uploads, analytics, telemetry, accounts, or runtime CDN dependencies. The web edition does not currently provide OCR or existing-PDF/Word conversion; those remain desktop features.
+The `web/` directory contains the responsive browser edition for desktop and mobile, with English and Simplified Chinese interfaces. It includes Photo Scanner, direct Images to PDF, Chinese/English OCR PDF, PDF to editable DOCX, DOCX to PDF, Merge, Split, visual page organization, Compress, and PDF to Images. It deliberately has no camera-capture requirement.
+
+Documents are processed locally in the browser. OpenCV.js, PDF.js, Tesseract.js, OCR language data, the Noto CJK font, and conversion libraries are bundled with the static site; there are no document uploads, analytics, telemetry, accounts, or runtime CDN dependencies. OCR and conversion accuracy requires review, PDF-to-DOCX layout is approximate, browser Word conversion supports DOCX rather than legacy DOC, and browser PDF compression rasterizes pages. See `web/README.md` for the complete feature and limitation list.
 
 ```powershell
 cd web
 npm ci
 npm test
 npm run test:browser
+npm run test:tools
 npm run build
 ```
 
-The production site is generated in `web/dist/`. Relative asset URLs support GitHub Pages project sites. This repository publishes from the `main` branch root (`/(root)`); `.nojekyll` disables Jekyll processing. The workflow in `.github/workflows/pages.yml` tests and builds the site after changes to `web/`, then commits refreshed copies of `index.html`, `assets/`, `favicon.svg`, and `licenses/` to that publishing root. See `web/README.md` for usage, testing, privacy, and limitations.
+The production site is generated in `web/dist/`. Relative asset URLs support GitHub Pages project sites. This repository publishes from the `main` branch root (`/(root)`); `.nojekyll` disables Jekyll processing. The workflow in `.github/workflows/pages.yml` tests and builds the site after changes to `web/`, then commits refreshed copies of `index.html`, `assets/`, `favicon.svg`, `licenses/`, `fonts/`, `pdfjs/`, and `tesseract/` to that publishing root. See `web/README.md` for usage, testing, privacy, and limitations.

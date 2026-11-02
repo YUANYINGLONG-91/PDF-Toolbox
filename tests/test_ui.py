@@ -131,7 +131,28 @@ def test_main_window_language_smoke(qapp, capabilities, tmp_path, monkeypatch, l
     from pdf_toolbox.ui.main_window import MainWindow
     window = MainWindow()
     assert window.navigation.item(0).text() == navigation
+    assert window.navigation.item(0).toolTip() == navigation
     assert window.tool_pages[0].export_button.text() == export
+    window.close()
+
+
+def test_navigation_search_selects_matching_tool(qapp, capabilities, tmp_path, monkeypatch):
+    AppSettings().save(tmp_path / "output", ENGLISH)
+    initialize_language(ENGLISH)
+    monkeypatch.setattr("pdf_toolbox.ui.main_window.detect_capabilities", lambda: capabilities)
+    from pdf_toolbox.ui.main_window import MainWindow
+    window = MainWindow()
+    window.navigation_search.setText("compress")
+    qapp.processEvents()
+    assert window.stack.currentWidget() is window.tool_pages[7]
+    assert not window.navigation.item(7).isHidden()
+    assert all(window.navigation.item(row).isHidden() for row in range(window.navigation.count()) if row != 7)
+
+    window.navigation_search.setText("not a real tool")
+    assert not window.navigation_empty.isHidden()
+    window.navigation_search.clear()
+    assert window.navigation_empty.isHidden()
+    assert all(not window.navigation.item(row).isHidden() for row in range(window.navigation.count()))
     window.close()
 
 
