@@ -126,7 +126,7 @@ export async function detectDocument(blob: Blob): Promise<Point[] | null> {
   }
 }
 
-export async function renderPage(page: ScanPage, maxDimension = 2200, quality = 0.88): Promise<RenderedPage> {
+export async function renderPage(page: ScanPage, maxDimension = 2200, quality = 0.94): Promise<RenderedPage> {
   const cv = await loadOpenCv();
   const response = await fetch(page.sourceUrl);
   const { canvas: sourceCanvas, image } = await blobToCanvas(await response.blob());
@@ -166,7 +166,7 @@ export async function renderPage(page: ScanPage, maxDimension = 2200, quality = 
       warped,
       transform,
       new cv.Size(size.width, size.height),
-      cv.INTER_CUBIC,
+      cv.INTER_LANCZOS4,
       cv.BORDER_CONSTANT,
       new cv.Scalar(255, 255, 255, 255),
     );
@@ -187,6 +187,59 @@ export async function renderPage(page: ScanPage, maxDimension = 2200, quality = 
   }
 }
 
+function normalizeIllumination(cv: Cv, source: Cv, paperLevel: number): Cv {
+  const background = new cv.Mat();
+  const output = new cv.Mat();
+  try {
+    const sigma = Math.max(12, Math.min(source.cols, source.rows) / 18);
+    cv.GaussianBlur(source, background, new cv.Size(0, 0), sigma, sigma, cv.BORDER_REPLICATE);
+    cv.divide(source, background, output, paperLevel);
+    return output;
+  } finally {
+    background.delete();
+  }
+}
+
+function documentContrast(cv: Cv, source: Cv, sharpness: number): Cv {
+  const gamma = Math.max(1, Math.min(1.25, 1.08 + 0.12 * Math.max(0, sharpness - 1)));
+  const values = Array.from({ length: 256 }, (_, value) => Math.round((value / 255) ** gamma * 255));
+  const lut = cv.matFromArray(256, 1, cv.CV_8U, values);
+  const output = new cv.Mat();
+  try {
+    cv.LUT(source, lut, output);
+    return output;
+  } finally {
+    lut.delete();
+  }
+}
+
+function unsharp(cv: Cv, source: Cv, amount: number): Cv {
+  const blurred = new cv.Mat();
+  const output = new cv.Mat();
+  try {
+    cv.GaussianBlur(source, blurred, new cv.Size(0, 0), 1, 1, cv.BORDER_REPLICATE);
+    cv.addWeighted(source, 1 + amount, blurred, -amount, 0, output);
+    return output;
+  } finally {
+    blurred.delete();
+  }
+}
+
+function localContrast(cv: Cv, source: Cv, clipLimit: number, mix: number): Cv {
+  // The browser OpenCV build omits CLAHE; a restrained broad-radius mask gives
+  // similar local contrast without global histogram equalization's harsh noise.
+  const blurred = new cv.Mat();
+  const output = new cv.Mat();
+  try {
+    const amount = clipLimit * mix * 0.4;
+    cv.GaussianBlur(source, blurred, new cv.Size(0, 0), 12, 12, cv.BORDER_REPLICATE);
+    cv.addWeighted(source, 1 + amount, blurred, -amount, 0, output);
+    return output;
+  } finally {
+    blurred.delete();
+  }
+}
+
 function enhanceDocument(cv: Cv, source: Cv, mode: ScanPage['mode'], strength: number): Cv {
   const resources: Mat[] = [];
   const track = <T extends Mat>(resource: T): T => {
@@ -198,74 +251,61 @@ function enhanceDocument(cv: Cv, source: Cv, mode: ScanPage['mode'], strength: n
     const index = resources.indexOf(resource);
     if (index >= 0) resources.splice(index, 1);
   };
+  const sharpness = Math.min(2, Math.max(0, strength * (1.55 / 0.7)));
   try {
-    const gray = track(new cv.Mat());
-    cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
-    const sigma = Math.max(8, Math.max(source.cols, source.rows) / 42);
-    const background = track(new cv.Mat());
-    cv.GaussianBlur(gray, background, new cv.Size(0, 0), sigma, sigma, cv.BORDER_REPLICATE);
-
     if (mode === 'color') {
       const rgb = track(new cv.Mat());
-      const backgroundRgb = track(new cv.Mat());
-      const normalized = track(new cv.Mat());
-      const blended = track(new cv.Mat());
-      const blurred = track(new cv.Mat());
-      const sharpened = track(new cv.Mat());
-      const contrasted = track(new cv.Mat());
-      const output = new cv.Mat();
       cv.cvtColor(source, rgb, cv.COLOR_RGBA2RGB);
-      cv.cvtColor(background, backgroundRgb, cv.COLOR_GRAY2RGB);
-      release(gray);
-      release(background);
-      cv.divide(rgb, backgroundRgb, normalized, 255);
-      release(backgroundRgb);
-      cv.addWeighted(rgb, 0.38, normalized, 0.62, 0, blended);
-      release(normalized);
-      cv.GaussianBlur(blended, blurred, new cv.Size(0, 0), 1.05, 1.05, cv.BORDER_REPLICATE);
-      const amount = 0.18 + strength * 1.18;
-      cv.addWeighted(blended, 1 + amount, blurred, -amount, 0, sharpened);
-      release(rgb);
-      release(blended);
-      release(blurred);
-      cv.convertScaleAbs(sharpened, contrasted, 1.025 + strength * 0.045, -1.5 - strength * 2.5);
-      release(sharpened);
-      cv.cvtColor(contrasted, output, cv.COLOR_RGB2RGBA);
-      release(contrasted);
+      const channels = track(new cv.MatVector());
+      cv.split(rgb, channels);
+      const balancedChannels = track(new cv.MatVector());
+      for (let index = 0; index < 3; index += 1) {
+        const channel = track(channels.get(index));
+        const normalized = track(normalizeIllumination(cv, channel, 250));
+        const blended = track(new cv.Mat());
+        cv.addWeighted(normalized, 0.96, channel, 0.04, 0, blended);
+        balancedChannels.push_back(blended);
+      }
+      const normalizedRgb = track(new cv.Mat());
+      cv.merge(balancedChannels, normalizedRgb);
+      const local = track(localContrast(cv, normalizedRgb, 1.35, 0.35));
+      const contrasted = track(documentContrast(cv, local, sharpness));
+      const sharpened = track(unsharp(cv, contrasted, 0.48 * sharpness));
+      const output = new cv.Mat();
+      cv.cvtColor(sharpened, output, cv.COLOR_RGB2RGBA);
       return output;
     }
 
-    const normalized = track(new cv.Mat());
-    cv.divide(gray, background, normalized, 255);
+    const gray = track(new cv.Mat());
+    cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
+    const normalized = track(normalizeIllumination(cv, gray, mode === 'gray' ? 250 : 245));
     release(gray);
-    release(background);
     if (mode === 'bw') {
-      const binary = track(new cv.Mat());
-      const output = new cv.Mat();
-      const rawBlock = Math.round(Math.min(source.cols, source.rows) / 24);
-      let block = Math.max(25, Math.min(81, rawBlock));
-      if (block % 2 === 0) block += 1;
-      cv.adaptiveThreshold(normalized, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, block, 8 + strength * 6);
+      const denoised = track(new cv.Mat());
+      cv.medianBlur(normalized, denoised, 3);
       release(normalized);
+      const contrasted = track(documentContrast(cv, denoised, sharpness));
+      release(denoised);
+      const sharpened = track(unsharp(cv, contrasted, 0.3 * sharpness));
+      release(contrasted);
+      let block = Math.max(31, Math.round(Math.min(source.cols, source.rows) * 0.045));
+      block = Math.min(151, block) | 1;
+      const binary = track(new cv.Mat());
+      cv.adaptiveThreshold(sharpened, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, block, 12);
+      release(sharpened);
+      const output = new cv.Mat();
       cv.cvtColor(binary, output, cv.COLOR_GRAY2RGBA);
       release(binary);
       return output;
     }
 
-    const equalized = track(new cv.Mat());
-    const contrasted = track(new cv.Mat());
-    cv.equalizeHist(normalized, equalized);
-    cv.addWeighted(normalized, 0.68, equalized, 0.32, 0, contrasted);
+    const local = track(localContrast(cv, normalized, 1.45, 0.4));
     release(normalized);
-    release(equalized);
-    const blurred = track(new cv.Mat());
-    const sharpened = track(new cv.Mat());
-    const output = new cv.Mat();
-    cv.GaussianBlur(contrasted, blurred, new cv.Size(0, 0), 0.9, 0.9, cv.BORDER_REPLICATE);
-    const amount = 0.25 + strength * 1.35;
-    cv.addWeighted(contrasted, 1 + amount, blurred, -amount, 0, sharpened);
+    const contrasted = track(documentContrast(cv, local, sharpness));
+    release(local);
+    const sharpened = track(unsharp(cv, contrasted, 0.42 * sharpness));
     release(contrasted);
-    release(blurred);
+    const output = new cv.Mat();
     cv.cvtColor(sharpened, output, cv.COLOR_GRAY2RGBA);
     release(sharpened);
     return output;

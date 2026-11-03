@@ -563,6 +563,7 @@ async function importFiles(fileList: FileList | File[]): Promise<void> {
   }
   if (added) {
     await selectPage(selectedId);
+    setView('result');
     showToast(`${added} ${t(added === 1 ? 'importSuccessOne' : 'importSuccess')}`);
     if (engineFailed) showToast(t('engineFailed'));
     else if (uncertainEdges) showToast(t('detectFailed'));

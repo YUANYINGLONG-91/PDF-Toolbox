@@ -38,11 +38,11 @@ export async function createPdf(
     onProgress(index + 1, pages.length);
     // Yield before expensive work so progress and accessibility updates paint.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    const rendered = await renderPage(pages[index], 2400, 0.9);
+    const rendered = await renderPage(pages[index], 3000, 0.95);
     const image = await pdf.embedJpg(new Uint8Array(await rendered.blob.arrayBuffer()));
     let width: number;
     let height: number;
-    let margin = 24;
+    let margin = 12;
     if (pageSize === 'image') {
       width = image.width * 72 / 150;
       height = image.height * 72 / 150;

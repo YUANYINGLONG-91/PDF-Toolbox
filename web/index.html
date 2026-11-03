@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f4ee" />
-    <meta name="description" content="Private browser-based document tools: scan photos, OCR, convert PDF and Word files, merge, split, organize, compress and render PDFs — without uploads." />
+    <meta name="description" content="Scan document photos, create PDFs, recognize text, convert files, and organize PDF pages." />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>PDF Toolbox — Private Document Studio</title>
+    <title>PDF Toolbox — Document tools</title>
   </head>
   <body>
     <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -65,18 +65,11 @@
 
       <section id="welcome" class="welcome">
         <div class="hero-copy">
-          <div class="eyebrow"><span></span><span data-i18n="eyebrow">YOUR PRIVATE SCAN STUDIO</span></div>
-          <h1 data-i18n="heroTitle">Paper in.<br><em>Polished PDF out.</em></h1>
-          <p data-i18n="heroBody">Clean up document photos, straighten every page, and create a beautiful PDF — right in your browser.</p>
-          <div class="hero-assurances">
-            <span><svg><use href="#i-check"/></svg><span data-i18n="noUploads">No uploads</span></span>
-            <span><svg><use href="#i-check"/></svg><span data-i18n="noAccount">No account</span></span>
-            <span><svg><use href="#i-check"/></svg><span data-i18n="free">Completely free</span></span>
-          </div>
+          <h1 data-i18n="heroTitle">Photo scanner</h1>
+          <p data-i18n="heroBody">Crop, clean, and sharpen document photos, then export a PDF.</p>
         </div>
 
         <div class="import-card">
-          <div class="import-card-top"><span data-i18n="startScan">START A NEW SCAN</span><span class="step-badge">01</span></div>
           <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Choose document images or drop them here">
             <div class="upload-orbit"><svg><use href="#i-upload"/></svg></div>
             <h2 data-i18n="dropTitle">Drop your document photos</h2>
@@ -84,21 +77,12 @@
             <button id="chooseButton" class="button button-primary" type="button"><svg><use href="#i-plus"/></svg><span data-i18n="chooseImages">Choose images</span></button>
             <small data-i18n="fileTypes">JPG, PNG or WEBP · Multiple images welcome</small>
           </div>
-          <div class="local-note"><svg><use href="#i-shield"/></svg><p><strong data-i18n="localTitle">Your documents stay yours.</strong><span data-i18n="localBody">Processing happens locally. Nothing is uploaded or saved.</span></p></div>
-        </div>
-
-        <div class="workflow-strip">
-          <div><span class="workflow-number">1</span><p><strong data-i18n="step1Title">Add your pages</strong><span data-i18n="step1Body">Import and arrange images</span></p></div>
-          <span class="workflow-line"></span>
-          <div><span class="workflow-number">2</span><p><strong data-i18n="step2Title">Make them crisp</strong><span data-i18n="step2Body">Crop, straighten and enhance</span></p></div>
-          <span class="workflow-line"></span>
-          <div><span class="workflow-number">3</span><p><strong data-i18n="step3Title">Download your PDF</strong><span data-i18n="step3Body">One file, ready to share</span></p></div>
         </div>
       </section>
 
       <section id="workspace" class="workspace" hidden>
         <div class="workspace-heading">
-          <div><div class="eyebrow"><span></span><span data-i18n="workspaceTag">SCAN WORKSPACE</span></div><h1 data-i18n="workspaceTitle">Make every page shine.</h1></div>
+          <div><h1 data-i18n="workspaceTitle">Scan workspace</h1></div>
           <div class="workspace-actions">
             <button id="addPagesButton" class="button button-secondary" type="button"><svg><use href="#i-plus"/></svg><span data-i18n="addPages">Add pages</span></button>
             <button id="startOverButton" class="button button-quiet" type="button"><svg><use href="#i-trash"/></svg><span data-i18n="startOver">Start over</span></button>
@@ -118,7 +102,7 @@
               <div><span id="editorPageLabel" class="editor-page-label">Page 1</span><span id="cropStatus" class="crop-status"></span></div>
               <div class="view-tabs" role="tablist" aria-label="Preview mode">
                 <button id="cropTab" class="view-tab active" role="tab" aria-selected="true" type="button"><svg><use href="#i-crop"/></svg><span data-i18n="crop">Crop</span></button>
-                <button id="resultTab" class="view-tab" role="tab" aria-selected="false" type="button"><svg><use href="#i-sparkles"/></svg><span data-i18n="result">Result</span></button>
+                <button id="resultTab" class="view-tab enhanced-tab" role="tab" aria-selected="false" type="button"><svg><use href="#i-sparkles"/></svg><span data-i18n="result">Enhanced scan</span></button>
               </div>
             </div>
 
@@ -152,17 +136,17 @@
 
           <aside class="inspector">
             <section class="panel enhance-panel">
-              <div class="panel-heading"><h2 data-i18n="enhance">Enhance</h2><svg class="heading-icon"><use href="#i-sparkles"/></svg></div>
-              <p class="panel-hint" data-i18n="enhanceHint">Clean backgrounds and sharpen handwriting.</p>
+              <div class="panel-heading"><h2 data-i18n="enhanceTitle">Enhancement</h2><svg class="heading-icon"><use href="#i-sparkles"/></svg></div>
+              <p class="panel-hint enhance-description" data-i18n="enhanceHint">Clean the paper background and sharpen text.</p>
+              <div class="enhance-section-label" data-i18n="scanStyle">Scan style</div>
               <div class="mode-switch" role="group" aria-label="Enhancement mode">
                 <button class="mode-button active" data-mode="color" type="button"><span class="mode-swatch color-swatch"></span><span data-i18n="color">Color</span></button>
                 <button class="mode-button" data-mode="gray" type="button"><span class="mode-swatch gray-swatch"></span><span data-i18n="grayscale">Gray</span></button>
                 <button class="mode-button" data-mode="bw" type="button"><span class="mode-swatch bw-swatch"></span><span data-i18n="bw">B&amp;W</span></button>
               </div>
-              <div class="strength-label"><label for="strengthRange" data-i18n="detailBoost">Detail boost</label><output id="strengthValue" for="strengthRange">70%</output></div>
+              <div class="strength-label"><label for="strengthRange" data-i18n="detailBoost">Sharpening</label><output id="strengthValue" for="strengthRange">70%</output></div>
               <input id="strengthRange" class="strength-range" type="range" min="0" max="100" value="70" />
               <div class="range-captions"><span data-i18n="natural">Natural</span><span data-i18n="crisp">Crisp</span></div>
-              <div class="handwriting-note"><svg><use href="#i-check"/></svg><span data-i18n="handwriting">Optimized for clear handwriting</span></div>
             </section>
 
             <section class="panel export-panel">
@@ -177,7 +161,6 @@
               </select>
               <button id="exportButton" class="button button-export" type="button"><svg><use href="#i-download"/></svg><span id="exportButtonText" data-i18n="downloadPdf">Download PDF</span></button>
               <p id="exportStatus" class="export-status" aria-live="polite"></p>
-              <p class="export-privacy"><svg><use href="#i-shield"/></svg><span data-i18n="exportPrivacy">Created on your device. Never uploaded.</span></p>
             </section>
           </aside>
         </div>
@@ -185,7 +168,6 @@
 
       <section id="utilityView" class="utility-view" hidden>
         <div class="utility-heading">
-          <div class="eyebrow"><span></span><span id="utilityEyebrow">LOCAL DOCUMENT TOOLKIT</span></div>
           <h1 id="utilityTitle">Document tool</h1>
           <p id="utilitySubtitle"></p>
         </div>
@@ -212,17 +194,15 @@
             <p id="utilityStatus" class="utility-status" role="status" aria-live="polite"></p>
           </section>
           <aside class="panel utility-side">
-            <span class="utility-side-icon"><svg><use href="#i-shield"/></svg></span>
-            <h2 id="utilitySideTitle">Private by design</h2>
+            <h2 id="utilitySideTitle">Notes and limitations</h2>
             <p id="utilityDescription"></p>
             <ul id="utilityNotes"></ul>
-            <div class="utility-local-note"><span class="status-dot"></span><span id="utilityLocalNote">Your files are processed in this browser and never uploaded.</span></div>
           </aside>
         </div>
       </section>
     </main>
 
-    <footer><span>PDF Toolbox <span class="footer-divider">/</span> <span data-i18n="footerTag">Thoughtful tools for paperless work.</span></span><span class="footer-local"><span class="status-dot"></span><span data-i18n="footerLocal">100% local processing</span></span></footer>
+    <footer><span>PDF Toolbox</span><span data-i18n="footerTag">Document tools for desktop and mobile</span></footer>
     <input id="fileInput" type="file" accept="image/*" multiple hidden />
     <div id="toast" class="toast" role="status" aria-live="polite" hidden><svg><use href="#i-alert"/></svg><span id="toastText"></span><button id="toastClose" type="button" aria-label="Dismiss"><svg><use href="#i-close"/></svg></button></div>
     <script type="module" src="/src/main.ts"></script>

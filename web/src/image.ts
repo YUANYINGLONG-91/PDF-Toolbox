@@ -39,7 +39,7 @@ export function canvasToBlob(canvas: HTMLCanvasElement, type = 'image/jpeg', qua
   });
 }
 
-export async function normalizeImage(file: Blob, maxDimension = 2400): Promise<{ blob: Blob; width: number; height: number }> {
+export async function normalizeImage(file: Blob, maxDimension = 3000): Promise<{ blob: Blob; width: number; height: number }> {
   const image = await decodeImage(file);
   try {
     const source = imageSize(image);
@@ -57,7 +57,7 @@ export async function normalizeImage(file: Blob, maxDimension = 2400): Promise<{
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     context.drawImage(image, 0, 0, width, height);
-    const blob = await canvasToBlob(canvas);
+    const blob = await canvasToBlob(canvas, 'image/jpeg', 0.95);
     canvas.width = canvas.height = 1;
     return { blob, width, height };
   } finally {

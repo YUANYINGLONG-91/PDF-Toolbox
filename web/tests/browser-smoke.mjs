@@ -87,8 +87,15 @@ try {
   await page.locator('#fileInput').setInputFiles({ name: 'field-notes.png', mimeType: 'image/png', buffer: imageBuffer });
   await page.waitForFunction(() => document.getElementById('globalProgress').hidden && !document.getElementById('workspace').hidden, undefined, { timeout: 120000 });
   await page.waitForFunction(() => document.getElementById('cropImage').naturalWidth > 0);
+  await page.waitForFunction(() => {
+    const image = document.getElementById('resultImage');
+    return image.src.startsWith('blob:') && image.complete && image.naturalWidth > 0 && document.getElementById('stageLoading').hidden;
+  }, undefined, { timeout: 120000 });
+  if (await page.locator('#resultTab').getAttribute('aria-selected') !== 'true') throw new Error('Enhanced scan should be shown after import');
   if (await page.locator('#pageCount').textContent() !== '1') throw new Error('First image was not imported');
   if (await page.locator('#toast').isVisible()) await page.locator('#toastClose').click();
+  await page.screenshot({ path: resolve(artifacts, 'desktop-enhanced.png'), fullPage: true });
+  await page.locator('#cropTab').click();
   await page.screenshot({ path: resolve(artifacts, 'desktop-crop.png'), fullPage: true });
 
   await page.locator('#resultTab').click();

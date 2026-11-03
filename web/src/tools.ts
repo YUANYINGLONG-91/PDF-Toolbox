@@ -27,7 +27,7 @@ const local = (value: LocalText) => value[getLanguage()];
 const common = {
   chooseFiles: tx('Choose files', '选择文件'),
   chooseImages: tx('Choose images', '选择图片'),
-  dropBody: tx('or drop them here · processing stays on this device', '或将文件拖到这里 · 全程在本机处理'),
+  dropBody: tx('or drop them here', '或将文件拖到这里'),
   outputName: tx('Output file name', '输出文件名'),
   ready: tx('Done. Your download is ready.', '处理完成，文件已开始下载。'),
   working: tx('Processing locally…', '正在本地处理…'),
@@ -44,9 +44,7 @@ const common = {
   page: tx('Page', '第'),
   pagesSuffix: tx('', '页'),
   filename: tx('Scanned document', '扫描文档'),
-  sideTitle: tx('Private by design', '隐私优先'),
-  localNote: tx('Your files are processed in this browser and never uploaded.', '文件仅在当前浏览器中处理，绝不上传。'),
-  eyebrow: tx('LOCAL DOCUMENT TOOLKIT', '本地文档工具箱'),
+  sideTitle: tx('Notes and limitations', '说明与限制'),
   pageRanges: tx('Page ranges', '页面范围'),
   language: tx('OCR language', 'OCR 识别语言'),
   bothLanguages: tx('Chinese + English', '简体中文 + 英语'),
@@ -173,8 +171,6 @@ const ui = {
   sideTitle: element('utilitySideTitle'),
   description: element('utilityDescription'),
   notes: element('utilityNotes'),
-  localNote: element('utilityLocalNote'),
-  eyebrow: element('utilityEyebrow'),
   organizer: element('organizerPreview'),
 };
 
@@ -404,7 +400,6 @@ function renderOrganizer(): void {
 function renderUtility(): void {
   if (activeTool === 'scan') return;
   const current = config();
-  ui.eyebrow.textContent = local(common.eyebrow);
   ui.title.textContent = local(current.title);
   ui.subtitle.textContent = local(current.subtitle);
   ui.dropTitle.textContent = local(current.dropTitle);
@@ -419,7 +414,6 @@ function renderUtility(): void {
   ui.runText.textContent = local(current.action);
   ui.sideTitle.textContent = local(common.sideTitle);
   ui.description.textContent = local(current.description);
-  ui.localNote.textContent = local(common.localNote);
   ui.notes.replaceChildren();
   current.notes.forEach((note) => {
     const item = document.createElement('li');
