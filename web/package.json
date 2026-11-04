@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:browser": "npm run build && node tests/browser-smoke.mjs",
+    "test:scanner": "node tests/scanner-quality-browser.mjs",
     "test:tools": "npm run build && node tests/document-tools-browser.mjs"
   },
   "dependencies": {

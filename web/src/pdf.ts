@@ -39,7 +39,11 @@ export async function createPdf(
     // Yield before expensive work so progress and accessibility updates paint.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const rendered = await renderPage(pages[index], 3000, 0.95);
-    const image = await pdf.embedJpg(new Uint8Array(await rendered.blob.arrayBuffer()));
+    const bytes = new Uint8Array(await rendered.blob.arrayBuffer());
+    let image;
+    if (rendered.blob.type === 'image/png') image = await pdf.embedPng(bytes);
+    else if (rendered.blob.type === 'image/jpeg') image = await pdf.embedJpg(bytes);
+    else throw new Error(`Unsupported rendered image type: ${rendered.blob.type || 'unknown'}`);
     let width: number;
     let height: number;
     let margin = 12;

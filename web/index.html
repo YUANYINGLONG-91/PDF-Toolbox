@@ -140,9 +140,9 @@
               <p class="panel-hint enhance-description" data-i18n="enhanceHint">Clean the paper background and sharpen text.</p>
               <div class="enhance-section-label" data-i18n="scanStyle">Scan style</div>
               <div class="mode-switch" role="group" aria-label="Enhancement mode">
-                <button class="mode-button active" data-mode="color" type="button"><span class="mode-swatch color-swatch"></span><span data-i18n="color">Color</span></button>
-                <button class="mode-button" data-mode="gray" type="button"><span class="mode-swatch gray-swatch"></span><span data-i18n="grayscale">Gray</span></button>
-                <button class="mode-button" data-mode="bw" type="button"><span class="mode-swatch bw-swatch"></span><span data-i18n="bw">B&amp;W</span></button>
+                <button class="mode-button" data-mode="color" type="button" aria-pressed="false"><span class="mode-swatch color-swatch"></span><span data-i18n="color">Color</span></button>
+                <button class="mode-button" data-mode="gray" type="button" aria-pressed="false"><span class="mode-swatch gray-swatch"></span><span data-i18n="grayscale">Gray</span></button>
+                <button class="mode-button active" data-mode="bw" type="button" aria-pressed="true"><span class="mode-swatch bw-swatch"></span><span data-i18n="bw">B&amp;W</span></button>
               </div>
               <div class="strength-label"><label for="strengthRange" data-i18n="detailBoost">Sharpening</label><output id="strengthValue" for="strengthRange">70%</output></div>
               <input id="strengthRange" class="strength-range" type="range" min="0" max="100" value="70" />
