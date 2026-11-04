@@ -120,7 +120,7 @@ function setStageBusy(busy: boolean, message = t('processing')): void {
 }
 
 function updateCropStatus(page: ScanPage): void {
-  ui.cropStatus.textContent = page.detected ? t('edgesFound') : t('manualCrop');
+  ui.cropStatus.textContent = page.detected ? t('edgesFound') : t('fullPageCrop');
   const index = pages.indexOf(page);
   ui.pageLabel.textContent = getLanguage() === 'zh'
     ? `${t('page')} ${index + 1} ${t('of')} ${pages.length} ${getLanguage() === 'zh' ? '页' : ''}`
@@ -421,9 +421,14 @@ async function autoCrop(): Promise<void> {
   const page = selectedPage();
   if (!page || exporting || importing) return;
   setStageBusy(true, t('detecting'));
+  let detected: Awaited<ReturnType<typeof detectDocument>> = null;
   try {
     const blob = await (await fetch(page.sourceUrl)).blob();
-    const detected = await detectDocument(blob);
+    detected = await detectDocument(blob);
+  } catch {
+    // A failed detector leaves a usable full-page scan rather than blocking export.
+  }
+  try {
     page.corners = detected ? rotateCorners(detected, page.rotation) : fullFrameCorners();
     page.detected = Boolean(detected);
     renderedResultKey = '';
@@ -432,8 +437,6 @@ async function autoCrop(): Promise<void> {
     if (!detected) showToast(t('detectFailed'));
     if (currentView === 'result') scheduleResult(true);
     scheduleThumbnail(page, true);
-  } catch {
-    showToast(t('engineFailed'));
   } finally {
     setStageBusy(false);
   }
@@ -508,7 +511,6 @@ async function importFiles(fileList: FileList | File[]): Promise<void> {
   let added = 0;
   let failed = 0;
   let engineFailed = false;
-  let uncertainEdges = false;
   // Start the local engine download/compile in parallel with image normalization.
   void loadOpenCv().catch(() => { engineFailed = true; });
   try {
@@ -525,7 +527,7 @@ async function importFiles(fileList: FileList | File[]): Promise<void> {
           height: normalized.height,
           rotation: 0,
           corners: fullFrameCorners(),
-          mode: 'color',
+          mode: 'bw',
           strength: 70,
           detected: false,
         };
@@ -538,9 +540,11 @@ async function importFiles(fileList: FileList | File[]): Promise<void> {
           if (corners) {
             page.corners = corners;
             page.detected = true;
-          } else {
-            uncertainEdges = true;
           }
+        } catch {
+          // Keep the full photo and continue; the crop status explains the fallback.
+        }
+        try {
           const thumbnail = await renderPage(page, 240, 0.78);
           page.thumbUrl = URL.createObjectURL(thumbnail.blob);
         } catch {
@@ -566,7 +570,6 @@ async function importFiles(fileList: FileList | File[]): Promise<void> {
     setView('result');
     showToast(`${added} ${t(added === 1 ? 'importSuccessOne' : 'importSuccess')}`);
     if (engineFailed) showToast(t('engineFailed'));
-    else if (uncertainEdges) showToast(t('detectFailed'));
   }
   if (failed) showToast(t('importError'));
 }

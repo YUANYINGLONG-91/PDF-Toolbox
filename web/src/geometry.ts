@@ -21,18 +21,32 @@ export function distance(a: Point, b: Point): number {
 }
 
 /** Returns corners in top-left, top-right, bottom-right, bottom-left order. */
-export function orderCorners(points: Point[]): Point[] {
+export function orderCorners(points: Point[]): Point[] | null {
   if (points.length !== 4 || points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
-    return fullFrameCorners();
+    return null;
   }
-  const sums = points.map((point) => point.x + point.y);
-  const differences = points.map((point) => point.x - point.y);
-  const topLeft = points[sums.indexOf(Math.min(...sums))];
-  const bottomRight = points[sums.indexOf(Math.max(...sums))];
-  const topRight = points[differences.indexOf(Math.max(...differences))];
-  const bottomLeft = points[differences.indexOf(Math.min(...differences))];
-  const ordered = [topLeft, topRight, bottomRight, bottomLeft];
-  return new Set(ordered).size === 4 ? ordered.map((point) => ({ ...point })) : fullFrameCorners();
+  if (points.some((point, index) => points.slice(index + 1).some((other) => distance(point, other) < 1e-6))) {
+    return null;
+  }
+  const center = points.reduce(
+    (sum, point) => ({ x: sum.x + point.x / 4, y: sum.y + point.y / 4 }),
+    { x: 0, y: 0 },
+  );
+  const ordered = points
+    .map((point) => ({ ...point }))
+    .sort((a, b) => Math.atan2(a.y - center.y, a.x - center.x) - Math.atan2(b.y - center.y, b.x - center.x));
+  if (!isUsableQuad(ordered)) return null;
+  let topLeft = 0;
+  for (let index = 1; index < 4; index += 1) {
+    const point = ordered[index];
+    const current = ordered[topLeft];
+    const pointSum = point.x + point.y;
+    const currentSum = current.x + current.y;
+    if (pointSum < currentSum - 1e-6 || (Math.abs(pointSum - currentSum) <= 1e-6 && point.x < current.x)) {
+      topLeft = index;
+    }
+  }
+  return [...ordered.slice(topLeft), ...ordered.slice(0, topLeft)];
 }
 
 export function rotateCorners(corners: Point[], amount: Rotation): Point[] {
@@ -61,10 +75,23 @@ export function quadArea(corners: Point[]): number {
 }
 
 export function isUsableQuad(corners: Point[]): boolean {
-  if (corners.length !== 4 || quadArea(corners) < 0.005) return false;
+  if (corners.length !== 4 || corners.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) return false;
+  if (!Number.isFinite(quadArea(corners)) || quadArea(corners) < 0.005) return false;
   const sign = (a: Point, b: Point, c: Point) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   const crosses = corners.map((point, index) => sign(point, corners[(index + 1) % 4], corners[(index + 2) % 4]));
-  return crosses.every((value) => value > 0) || crosses.every((value) => value < 0);
+  if (!(crosses.every((value) => value > 0) || crosses.every((value) => value < 0))) return false;
+  for (let index = 0; index < 4; index += 1) {
+    const point = corners[index];
+    const previous = corners[(index + 3) % 4];
+    const following = corners[(index + 1) % 4];
+    const before = { x: previous.x - point.x, y: previous.y - point.y };
+    const after = { x: following.x - point.x, y: following.y - point.y };
+    const side = Math.hypot(after.x, after.y);
+    if (side < 0.04) return false;
+    const cosine = Math.abs((before.x * after.x + before.y * after.y) / Math.max(1e-9, Math.hypot(before.x, before.y) * side));
+    if (cosine > 0.96) return false;
+  }
+  return true;
 }
 
 export function outputSize(corners: Point[], width: number, height: number, maxDimension = 2400): { width: number; height: number } {

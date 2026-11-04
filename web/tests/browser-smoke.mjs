@@ -4,7 +4,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFStream } from 'pdf-lib';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 const artifacts = fileURLToPath(new URL('../test-output/', import.meta.url));
@@ -92,6 +92,9 @@ try {
     return image.src.startsWith('blob:') && image.complete && image.naturalWidth > 0 && document.getElementById('stageLoading').hidden;
   }, undefined, { timeout: 120000 });
   if (await page.locator('#resultTab').getAttribute('aria-selected') !== 'true') throw new Error('Enhanced scan should be shown after import');
+  if (await page.locator('[data-mode="bw"]').getAttribute('aria-pressed') !== 'true') throw new Error('First import should default to B&W');
+  const firstMime = await page.evaluate(async () => (await (await fetch(document.getElementById('resultImage').src)).blob()).type);
+  if (firstMime !== 'image/png') throw new Error(`B&W preview should be PNG, received ${firstMime}`);
   if (await page.locator('#pageCount').textContent() !== '1') throw new Error('First image was not imported');
   if (await page.locator('#toast').isVisible()) await page.locator('#toastClose').click();
   await page.screenshot({ path: resolve(artifacts, 'desktop-enhanced.png'), fullPage: true });
@@ -104,10 +107,17 @@ try {
     return image.src.startsWith('blob:') && image.complete && image.naturalWidth > 0 && document.getElementById('stageLoading').hidden;
   }, undefined, { timeout: 120000 });
   const firstResult = await page.locator('#resultImage').getAttribute('src');
+  await page.locator('[data-mode="color"]').click();
+  await page.waitForFunction((previous) => document.getElementById('resultImage').src !== previous && document.getElementById('stageLoading').hidden, firstResult, { timeout: 120000 });
+  const colorMime = await page.evaluate(async () => (await (await fetch(document.getElementById('resultImage').src)).blob()).type);
+  if (colorMime !== 'image/jpeg') throw new Error(`Color preview should remain JPEG, received ${colorMime}`);
+  const colorResult = await page.locator('#resultImage').getAttribute('src');
   await page.locator('[data-mode="gray"]').click();
-  await page.waitForFunction((previous) => document.getElementById('resultImage').src !== previous || !document.getElementById('toast').hidden, firstResult, { timeout: 120000 });
+  await page.waitForFunction((previous) => document.getElementById('resultImage').src !== previous || !document.getElementById('toast').hidden, colorResult, { timeout: 120000 });
   if (await page.locator('#toast').isVisible()) throw new Error(`Enhancement failed: ${await page.locator('#toastText').textContent()}`);
   await page.waitForFunction(() => document.getElementById('stageLoading').hidden, undefined, { timeout: 120000 });
+  const grayMime = await page.evaluate(async () => (await (await fetch(document.getElementById('resultImage').src)).blob()).type);
+  if (grayMime !== 'image/jpeg') throw new Error(`Gray preview should remain JPEG, received ${grayMime}`);
   const grayResult = await page.locator('#resultImage').getAttribute('src');
   await page.locator('[data-mode="bw"]').click();
   await page.waitForFunction((previous) => document.getElementById('resultImage').src !== previous && document.getElementById('stageLoading').hidden, grayResult, { timeout: 120000 });
@@ -125,6 +135,14 @@ try {
 
   await page.locator('#fileInput').setInputFiles({ name: 'second-page.png', mimeType: 'image/png', buffer: imageBuffer });
   await page.waitForFunction(() => document.getElementById('pageCount').textContent === '2' && document.getElementById('globalProgress').hidden, { timeout: 120000 });
+  await page.locator('#pageList .page-item').nth(1).locator('.page-thumb').click();
+  await page.waitForFunction(() => document.getElementById('stageLoading').hidden, undefined, { timeout: 120000 });
+  if (await page.locator('[data-mode="bw"]').getAttribute('aria-pressed') !== 'true') throw new Error('Every appended page should default to B&W');
+  await page.locator('#resultTab').click();
+  await page.waitForFunction(() => document.getElementById('stageLoading').hidden && document.getElementById('resultImage').naturalWidth > 0, undefined, { timeout: 120000 });
+  const secondResult = await page.locator('#resultImage').getAttribute('src');
+  await page.locator('[data-mode="gray"]').click();
+  await page.waitForFunction((previous) => document.getElementById('resultImage').src !== previous && document.getElementById('stageLoading').hidden, secondResult, { timeout: 120000 });
   await page.locator('#pageList .page-item').nth(1).locator('.page-controls button').first().click();
   await page.locator('#filenameInput').fill('Browser smoke test');
   const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
@@ -134,6 +152,11 @@ try {
   const pdfBytes = await readFile(downloadPath);
   const pdf = await PDFDocument.load(pdfBytes);
   if (pdf.getPageCount() !== 2) throw new Error(`Expected a 2-page PDF, received ${pdf.getPageCount()}`);
+  const imageFilters = pdf.context.enumerateIndirectObjects()
+    .filter(([, object]) => object instanceof PDFStream && object.dict.get(PDFName.of('Subtype')) === PDFName.of('Image'))
+    .map(([, image]) => String(image.dict.get(PDFName.of('Filter'))));
+  if (!imageFilters.includes('/DCTDecode')) throw new Error(`Gray page image should use JPEG: ${imageFilters.join(', ')}`);
+  if (!imageFilters.includes('/FlateDecode')) throw new Error(`B&W page image should use lossless PNG data: ${imageFilters.join(', ')}`);
   if (download.suggestedFilename() !== 'Browser smoke test.pdf') throw new Error('PDF filename was not preserved');
 
   await page.locator('#languageButton').click();

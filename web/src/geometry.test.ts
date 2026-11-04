@@ -3,7 +3,7 @@ import { clampPoint, fullFrameCorners, isUsableQuad, orderCorners, outputSize, q
 
 describe('document geometry', () => {
   it('orders arbitrary contour corners clockwise from the top left', () => {
-    const ordered = orderCorners([{ x: 0.9, y: 0.8 }, { x: 0.1, y: 0.1 }, { x: 0.15, y: 0.85 }, { x: 0.85, y: 0.12 }]);
+    const ordered = orderCorners([{ x: 0.9, y: 0.8 }, { x: 0.1, y: 0.1 }, { x: 0.15, y: 0.85 }, { x: 0.85, y: 0.12 }])!;
     expect(ordered[0]).toEqual({ x: 0.1, y: 0.1 });
     expect(ordered[1]).toEqual({ x: 0.85, y: 0.12 });
     expect(ordered[2]).toEqual({ x: 0.9, y: 0.8 });
@@ -38,6 +38,18 @@ describe('document geometry', () => {
     expect(isUsableQuad([{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 1, y: 0 }, { x: 0, y: 1 }])).toBe(false);
     expect(isUsableQuad(fullFrameCorners())).toBe(true);
     expect(quadArea(fullFrameCorners())).toBe(1);
+  });
+
+  it('rejects invalid corner ordering instead of pretending the full frame was detected', () => {
+    expect(orderCorners([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }])).toBeNull();
+    expect(orderCorners([{ x: 0, y: 0 }, { x: Number.NaN, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }])).toBeNull();
+    expect(orderCorners([])).toBeNull();
+    expect(orderCorners(fullFrameCorners())).toEqual(fullFrameCorners());
+  });
+
+  it('rejects short sides and nearly collapsed corners', () => {
+    expect(isUsableQuad([{ x: 0, y: 0 }, { x: 0.01, y: 0 }, { x: 0.01, y: 1 }, { x: 0, y: 1 }])).toBe(false);
+    expect(isUsableQuad([{ x: 0, y: 0 }, { x: 0.5, y: 0.49 }, { x: 1, y: 1 }, { x: 0, y: 1 }])).toBe(false);
   });
 
   it('clamps dragged points to the image', () => {
