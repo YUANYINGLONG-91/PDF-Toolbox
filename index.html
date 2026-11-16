@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#080b14" />
+    <meta name="theme-color" content="#e9e8e2" />
     <meta name="description" content="Scan document photos, create PDFs, recognize text, convert files, and organize PDF pages." />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>PDF Toolbox — Document tools</title>
-    <script type="module" crossorigin src="./assets/index-De2fbQJ7.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-hA7850c0.css">
+    <script type="module" crossorigin src="./assets/index-Ck_HUlhy.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-XOPL3gL1.css">
   </head>
   <body>
     <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -35,12 +35,6 @@
         <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
       </defs>
     </svg>
-
-    <div class="ambient-scene" aria-hidden="true">
-      <span class="ambient-orb ambient-orb-cyan"></span>
-      <span class="ambient-orb ambient-orb-violet"></span>
-      <span class="perspective-grid"></span>
-    </div>
 
     <header class="site-header">
       <a class="brand" href="./" aria-label="PDF Toolbox home">
@@ -79,32 +73,28 @@
         </div>
 
         <div class="hero-scene" data-visual-scene aria-hidden="true">
-          <div class="scene-halo"></div>
-          <div class="scene-orbit scene-orbit-one"></div>
-          <div class="scene-orbit scene-orbit-two"></div>
-          <div class="document-float">
-            <div class="document-object">
-              <div class="doc-sheet doc-sheet-back"><span></span><span></span><span></span></div>
-              <div class="doc-sheet doc-sheet-middle"><span></span><span></span><span></span></div>
-              <div class="doc-sheet doc-sheet-front">
-                <div class="doc-heading"><i></i><b></b></div>
-                <div class="doc-scan-area">
-                  <span class="scan-corner scan-corner-tl"></span><span class="scan-corner scan-corner-tr"></span>
-                  <span class="scan-corner scan-corner-bl"></span><span class="scan-corner scan-corner-br"></span>
-                  <svg><use href="#i-scan"/></svg>
-                  <div class="scan-beam"></div>
-                </div>
-                <div class="doc-lines"><span></span><span></span><span></span></div>
-              </div>
-              <div class="floating-chip chip-scan"><svg><use href="#i-sparkles"/></svg><span>SCAN</span></div>
-              <div class="floating-chip chip-pdf"><svg><use href="#i-file"/></svg><span>PDF</span></div>
-            </div>
+          <div class="scanner-fallback">
+            <svg viewBox="0 0 640 460" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="330" cy="390" rx="218" ry="32" fill="rgba(30,32,29,.12)"/>
+              <path d="M120 215 355 147 533 235 295 309Z" fill="#4b4e49"/>
+              <path d="M120 215 295 309 295 365 120 267Z" fill="#252824"/>
+              <path d="M295 309 533 235 533 291 295 365Z" fill="#343732"/>
+              <path d="M143 207 350 151 503 224 294 284Z" fill="#a9aca4"/>
+              <path d="M158 205 350 158 482 218 292 270Z" fill="#d8dbd2"/>
+              <path d="M197 190 300 74 471 139 385 239Z" fill="#343733"/>
+              <path d="M208 185 305 88 453 143 380 222Z" fill="#60645d"/>
+              <path d="M241 233 348 199 420 232 312 269Z" fill="#f7f5ed"/>
+              <path d="m312 269 108-37v91l-108 40Z" fill="#e8e5dc"/>
+              <path d="m312 269 108-37v91l-108 40Z" fill="none" stroke="#c5c3ba"/>
+              <path d="m331 289 66-23m-66 43 66-23m-66 43 46-16" stroke="#8c8f88" stroke-width="3"/>
+              <path d="M151 269 274 337" stroke="#11130f" stroke-width="8"/>
+              <rect x="459" y="283" width="28" height="7" rx="3.5" fill="#b7ed54" transform="rotate(-18 459 283)"/>
+            </svg>
           </div>
-          <div class="scene-platform"></div>
+          <div class="scene-caption"><span>3D / 01</span><span class="scene-caption-line"></span><span data-i18n="sceneHint">Drag to rotate</span></div>
         </div>
 
-        <div class="import-card" data-tilt>
-          <div class="card-glow" aria-hidden="true"></div>
+        <div class="import-card">
           <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Choose document images or drop them here">
             <div class="upload-orbit"><svg><use href="#i-upload"/></svg></div>
             <h2 data-i18n="dropTitle">Drop your document photos</h2>
