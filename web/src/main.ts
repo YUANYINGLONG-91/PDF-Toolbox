@@ -6,6 +6,9 @@ import { detectDocument, loadOpenCv, renderPage } from './opencv';
 import { createPdf, sanitizePdfFilename } from './pdf';
 import { getLanguage, setLanguage, t, type Language } from './i18n';
 import { refreshToolLanguage, setupToolNavigation } from './tools';
+import { initVisualEffects } from './visual-effects';
+
+initVisualEffects();
 
 function element<T extends Element = HTMLElement>(id: string): T {
   const found = document.getElementById(id);
