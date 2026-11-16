@@ -1,5 +1,5 @@
 const en = {
-  brandTag: 'DOCUMENT TOOLS',
+  brandTag: 'DOCUMENT WORKSPACE',
   navScan: 'Photo scanner',
   navImages: 'Images to PDF',
   navOcr: 'OCR PDF',
@@ -11,9 +11,31 @@ const en = {
   navCompress: 'Compress',
   navRender: 'PDF to images',
   private: 'Processed in this browser',
-  heroTitle: 'Photo scanner',
-  heroBody: 'Crop, clean, and sharpen document photos, then export a PDF.',
-  sceneHint: 'Drag to rotate',
+  heroEyebrow: 'SPATIAL DOCUMENT TOOLS',
+  heroTitle: 'Documents, in motion.',
+  heroBody: 'Shape, clean, and organize your pages in a workspace you can touch.',
+  sceneLabel: 'Interactive 3D document workspace',
+  sceneHint: 'Drag to orbit · Select a page',
+  scenePages: 'Choose a document page',
+  scenePage1: 'Select page 1',
+  scenePage2: 'Select page 2',
+  scenePage3: 'Select page 3',
+  scenePage4: 'Select page 4',
+  scenePage5: 'Select page 5',
+  sceneActions: 'Document space actions',
+  sceneGather: 'Gather pages',
+  sceneFan: 'Fan pages',
+  sceneCrop: 'Crop guides',
+  sceneEnhance: 'Enhance',
+  sceneReset: 'Reset view',
+  githubAria: 'Open YUANYINGLONG-91 on GitHub in a new tab',
+  sceneStatusFanOpen: 'Pages fanned out.',
+  sceneStatusFanClosed: 'Pages gathered.',
+  sceneStatusCrop: 'Crop guides shown. Demonstration only.',
+  sceneStatusEnhanced: 'Enhanced document preview.',
+  sceneStatusReset: 'Document space reset.',
+  sceneStatusPage: 'Page {page} selected.',
+  sceneStatusFallback: 'Static document preview. WebGL is unavailable.',
   dropTitle: 'Drop your document photos',
   dropBody: 'or choose images from your device',
   chooseImages: 'Choose images',
@@ -77,7 +99,7 @@ const en = {
 };
 
 const zh: Record<keyof typeof en, string> = {
-  brandTag: '文档工具箱',
+  brandTag: '文档工作台',
   navScan: '照片扫描',
   navImages: '图片合并 PDF',
   navOcr: 'OCR 识别 PDF',
@@ -89,9 +111,31 @@ const zh: Record<keyof typeof en, string> = {
   navCompress: '压缩 PDF',
   navRender: 'PDF 转图片',
   private: '在浏览器中处理',
-  heroTitle: '照片扫描',
-  heroBody: '裁剪、净化并锐化文档照片，然后导出 PDF。',
-  sceneHint: '拖动旋转',
+  heroEyebrow: '空间文档工具',
+  heroTitle: '让文档，动起来。',
+  heroBody: '在可触摸的空间里整理、净化并编排你的每一页。',
+  sceneLabel: '可交互的 3D 文档工作台',
+  sceneHint: '拖动旋转 · 点击选择页面',
+  scenePages: '选择文档页面',
+  scenePage1: '选择第 1 页',
+  scenePage2: '选择第 2 页',
+  scenePage3: '选择第 3 页',
+  scenePage4: '选择第 4 页',
+  scenePage5: '选择第 5 页',
+  sceneActions: '文档空间操作',
+  sceneGather: '收拢页面',
+  sceneFan: '展开页面',
+  sceneCrop: '裁剪参考线',
+  sceneEnhance: '增强效果',
+  sceneReset: '重置视角',
+  githubAria: '在新标签页打开 YUANYINGLONG-91 的 GitHub 主页',
+  sceneStatusFanOpen: '页面已展开。',
+  sceneStatusFanClosed: '页面已收拢。',
+  sceneStatusCrop: '已显示裁剪参考线，仅作演示。',
+  sceneStatusEnhanced: '已显示增强后的文档预览。',
+  sceneStatusReset: '文档空间已重置。',
+  sceneStatusPage: '已选择第 {page} 页。',
+  sceneStatusFallback: '当前显示静态文档预览，WebGL 不可用。',
   dropTitle: '将文档照片拖到这里',
   dropBody: '或从设备中选择图片',
   chooseImages: '选择图片',
@@ -167,6 +211,11 @@ export function setLanguage(language: Language): void {
     const key = element.dataset.i18n as TranslationKey;
     if (key in strings) element.textContent = strings[key];
   });
+  document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]').forEach((element) => {
+    const key = element.dataset.i18nAriaLabel as TranslationKey;
+    if (key in strings) element.setAttribute('aria-label', strings[key]);
+  });
+  document.dispatchEvent(new CustomEvent<Language>('pdf-toolbox-language-change', { detail: language }));
   const label = document.querySelector<HTMLElement>('#languageLabel');
   const button = document.querySelector<HTMLButtonElement>('#languageButton');
   if (label) label.textContent = language === 'zh' ? 'English' : '简体中文';

@@ -1,15 +1,56 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
-const mountMarker = Symbol('scanner-scene-mounted');
-type ScannerHost = HTMLElement & { [mountMarker]?: boolean };
+export type SceneMode = 'fan' | 'crop' | 'enhanced';
+
+export interface DocumentSceneHandle {
+  destroy(): void;
+  selectPage(index: number): void;
+  toggleFan(): void;
+  setMode(mode: SceneMode): void;
+  reset(): void;
+}
+
+const mountMarker = Symbol('document-scene-mounted');
+type DocumentHost = HTMLElement & { [mountMarker]?: boolean };
+
+type Pose = {
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
+};
+
+type Transition = {
+  kind: 'layout' | 'enhanced';
+  start: number;
+  duration: number;
+  from: Pose[];
+  to: Pose[];
+  cleanFrom: number;
+  cleanTo: number;
+  outputFrom: number;
+  outputTo: number;
+};
 
 const clamp = THREE.MathUtils.clamp;
-const smoothstep = THREE.MathUtils.smoothstep;
+const PAGE_COUNT = 5;
+const PAGE_WIDTH = 2.68;
+const PAGE_LENGTH = 3.55;
+const PAGE_THICKNESS = 0.022;
 
-export function mountScannerScene(host: HTMLElement): () => void {
-  const sceneHost = host as ScannerHost;
-  if (sceneHost[mountMarker]) return () => undefined;
+export function mountDocumentScene(host: HTMLElement): DocumentSceneHandle {
+  const sceneHost = host as DocumentHost;
+  if (sceneHost[mountMarker]) {
+    return {
+      destroy: () => undefined,
+      selectPage: () => undefined,
+      toggleFan: () => undefined,
+      setMode: () => undefined,
+      reset: () => undefined,
+    };
+  }
   sceneHost[mountMarker] = true;
 
   let renderer: THREE.WebGLRenderer | undefined;
@@ -21,27 +62,69 @@ export function mountScannerScene(host: HTMLElement): () => void {
   let inViewport = true;
   let welcomeVisible = true;
   let lastTime = 0;
-  let elapsed = 1.25;
   let renderWidth = 0;
   let renderHeight = 0;
   let renderDpr = 0;
+
+  let selectedPage = 0;
+  let fanOpen = true;
+  let mode: SceneMode = 'fan';
+  let transition: Transition | null = null;
+  let cleanAmount = 0;
+  let outputAmount = 0;
 
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
   const cleanupTasks: Array<() => void> = [];
 
+  const syncDataset = (): void => {
+    host.dataset.rotation = '0.00';
+    host.dataset.sceneState = mode;
+    host.dataset.selectedPage = String(selectedPage + 1);
+    host.dataset.fan = fanOpen ? 'open' : 'closed';
+    host.dataset.sceneTransition = transition?.kind === 'enhanced' ? 'enhancing' : 'idle';
+  };
+
+  const fallbackHandle = (): DocumentSceneHandle => ({
+    destroy: () => undefined,
+    selectPage: (index: number) => {
+      if (disposed || !Number.isInteger(index)) return;
+      selectedPage = clamp(index, 0, PAGE_COUNT - 1);
+      host.dataset.selectedPage = String(selectedPage + 1);
+    },
+    toggleFan: () => {
+      if (disposed) return;
+      fanOpen = !fanOpen;
+      host.dataset.fan = fanOpen ? 'open' : 'closed';
+    },
+    setMode: (nextMode: SceneMode) => {
+      if (disposed) return;
+      mode = nextMode;
+      host.dataset.sceneState = nextMode;
+    },
+    reset: () => {
+      if (disposed) return;
+      selectedPage = 0;
+      fanOpen = true;
+      mode = 'fan';
+      syncDataset();
+    },
+  });
+
   const cleanup = (): void => {
     if (disposed) return;
     disposed = true;
+    transition = null;
     if (frameId) cancelAnimationFrame(frameId);
     frameId = 0;
     host.classList.remove('is-webgl-ready');
-    delete host.dataset.webgl;
-    delete host.dataset.rotation;
+    for (const key of ['webgl', 'rotation', 'sceneState', 'selectedPage', 'fan', 'sceneTransition']) {
+      delete host.dataset[key];
+    }
 
     for (const task of cleanupTasks.splice(0)) {
-      try { task(); } catch { /* A failed observer must not block disposal. */ }
+      try { task(); } catch { /* One failed observer must not block disposal. */ }
     }
     for (const geometry of geometries) {
       try { geometry.dispose(); } catch { /* Continue releasing the scene. */ }
@@ -56,8 +139,12 @@ export function mountScannerScene(host: HTMLElement): () => void {
       try { renderer.dispose(); } catch { /* The context may already be gone. */ }
     }
     canvas?.remove();
+    renderer = undefined;
+    canvas = undefined;
     delete sceneHost[mountMarker];
   };
+
+  syncDataset();
 
   try {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -79,23 +166,26 @@ export function mountScannerScene(host: HTMLElement): () => void {
     canvas.style.touchAction = 'pan-y';
     canvas.style.cursor = 'grab';
     canvas.style.userSelect = 'none';
+    canvas.style.setProperty('-webkit-tap-highlight-color', 'transparent');
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 1.08;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.setClearColor(0x101315, 0);
+    renderer.setClearColor(0x101416, 0);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0xe9e8e2, 13, 29);
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
-    const target = new THREE.Vector3(0, 0.78, 0.35);
-    const defaultYaw = Math.atan2(6, 6.65);
-    const defaultPitch = Math.atan2(3.82, Math.hypot(6, 6.65));
-    const defaultDistance = Math.hypot(6, 3.82, 6.65);
+    scene.fog = new THREE.Fog(0x111719, 16, 32);
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 60);
+    const target = new THREE.Vector3(0, 0.5, 0.18);
+    const defaultYaw = 0.58;
+    const defaultPitch = 0.68;
     let yaw = defaultYaw;
     let pitch = defaultPitch;
-    let cameraFit = 1;
+    let orbitYaw = defaultYaw;
+    let orbitPitch = defaultPitch;
+    let cameraDistance = 11.8;
+    let fittedDistance = cameraDistance;
 
     const trackGeometry = <T extends THREE.BufferGeometry>(geometry: T): T => {
       geometries.add(geometry);
@@ -105,254 +195,198 @@ export function mountScannerScene(host: HTMLElement): () => void {
       materials.add(material);
       return material;
     };
+    const trackTexture = <T extends THREE.Texture>(texture: T): T => {
+      textures.add(texture);
+      return texture;
+    };
     const makeMesh = (
       geometry: THREE.BufferGeometry,
-      material: THREE.Material,
+      material: THREE.Material | THREE.Material[],
       parent: THREE.Object3D,
       castShadow = true,
+      receiveShadow = true,
     ): THREE.Mesh => {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = castShadow;
-      mesh.receiveShadow = true;
+      mesh.receiveShadow = receiveShadow;
       parent.add(mesh);
       return mesh;
     };
-    const rounded = (width: number, height: number, depth: number, radius = 0.06): RoundedBoxGeometry =>
-      trackGeometry(new RoundedBoxGeometry(width, height, depth, 3, Math.min(radius, height / 2, depth / 2)));
 
-    const chassisMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x292d30,
-      metalness: 0.52,
-      roughness: 0.34,
-    }));
-    const lowerMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x171a1c,
-      metalness: 0.42,
-      roughness: 0.48,
-    }));
-    const trimMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x899195,
-      metalness: 0.9,
-      roughness: 0.23,
-    }));
-    const darkTrimMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x3d4448,
-      metalness: 0.78,
-      roughness: 0.3,
-    }));
-    const rubberMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x090b0c,
-      metalness: 0.05,
-      roughness: 0.88,
-    }));
-    const slotMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x050607,
-      metalness: 0.1,
-      roughness: 0.72,
-    }));
-    const glassMaterial = trackMaterial(new THREE.MeshPhysicalMaterial({
-      color: 0x779095,
-      metalness: 0.08,
-      roughness: 0.12,
-      clearcoat: 1,
-      clearcoatRoughness: 0.08,
-      transparent: true,
-      opacity: 0.58,
-      depthWrite: false,
-    }));
-    const undersideMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0x343a3d,
-      metalness: 0.16,
-      roughness: 0.62,
-    }));
-
-    const scanner = new THREE.Group();
-    scene.add(scanner);
-
-    const lowerBase = makeMesh(rounded(4.64, 0.24, 3.36, 0.11), lowerMaterial, scanner);
-    lowerBase.position.set(0, 0.29, 0);
-    const chassis = makeMesh(rounded(4.8, 0.94, 3.5, 0.15), chassisMaterial, scanner);
-    chassis.position.set(0, 0.78, 0);
-    const upperDeck = makeMesh(rounded(4.66, 0.2, 3.36, 0.08), darkTrimMaterial, scanner);
-    upperDeck.position.set(0, 1.27, -0.01);
-
-    const footGeometry = trackGeometry(new THREE.CylinderGeometry(0.2, 0.22, 0.16, 16));
-    for (const x of [-1.86, 1.86]) {
-      for (const z of [-1.24, 1.24]) {
-        const foot = makeMesh(footGeometry, rubberMaterial, scanner);
-        foot.position.set(x, 0.1, z);
+    const paperBase = (context: CanvasRenderingContext2D, clean: boolean): void => {
+      context.fillStyle = clean ? '#ffffff' : '#edf1f2';
+      context.fillRect(0, 0, 768, 1024);
+      if (!clean) {
+        const shade = context.createLinearGradient(0, 0, 768, 1024);
+        shade.addColorStop(0, 'rgba(255,255,255,0.32)');
+        shade.addColorStop(0.55, 'rgba(213,222,225,0.03)');
+        shade.addColorStop(1, 'rgba(174,187,192,0.13)');
+        context.fillStyle = shade;
+        context.fillRect(0, 0, 768, 1024);
       }
-    }
+    };
 
-    const frontSeam = makeMesh(rounded(4.38, 0.025, 0.026, 0.01), trimMaterial, scanner, false);
-    frontSeam.position.set(0, 0.4, 1.754);
-    for (const x of [-2.402, 2.402]) {
-      const sideSeam = makeMesh(rounded(0.018, 0.025, 3.08, 0.008), darkTrimMaterial, scanner, false);
-      sideSeam.position.set(x, 0.4, 0);
-    }
+    const drawDocument = (index: number, clean: boolean): HTMLCanvasElement => {
+      const printCanvas = document.createElement('canvas');
+      printCanvas.width = 768;
+      printCanvas.height = 1024;
+      const context = printCanvas.getContext('2d');
+      if (!context) throw new Error('Canvas textures are unavailable');
+      paperBase(context, clean);
 
-    const bed = makeMesh(rounded(4.28, 0.07, 3.02, 0.055), slotMaterial, scanner);
-    bed.position.set(0, 1.385, -0.02);
-    const glass = makeMesh(rounded(4.1, 0.045, 2.84, 0.045), glassMaterial, scanner, false);
-    glass.position.set(0, 1.435, -0.02);
-    glass.renderOrder = 1;
+      const ink = clean ? '#10171a' : '#263238';
+      const secondary = clean ? '#465156' : '#657278';
+      const faint = clean ? '#a4adb0' : '#b6bfc2';
+      const rule = clean ? '#c3c9cb' : '#ccd3d5';
+      const teal = clean ? '#086f70' : '#287e80';
+      const titles = ['Document intelligence', 'A clearer original', 'Project summary', 'Visual report', 'Notes & next steps'];
+      const labels = ['PDF TOOLBOX / WORKSPACE', 'SCAN NOTES / ORIGINAL', 'QUARTERLY REVIEW / 04', 'RESEARCH BRIEF / 08', 'ACTION PLAN / FINAL'];
 
-    for (const x of [-2.15, 2.15]) {
-      const rail = makeMesh(rounded(0.075, 0.055, 3.04, 0.02), trimMaterial, scanner);
-      rail.position.set(x, 1.42, -0.02);
-    }
-    for (const z of [-1.53, 1.49]) {
-      const rail = makeMesh(rounded(4.34, 0.055, 0.075, 0.02), trimMaterial, scanner);
-      rail.position.set(0, 1.42, z);
-    }
+      context.fillStyle = teal;
+      context.fillRect(58, 54, 9, 46);
+      context.fillStyle = ink;
+      context.font = '700 25px Arial, Helvetica, sans-serif';
+      context.fillText('PDF TOOLBOX', 84, 78);
+      context.fillStyle = secondary;
+      context.font = '600 13px Arial, Helvetica, sans-serif';
+      context.fillText(labels[index], 84, 101);
+      context.textAlign = 'right';
+      context.font = '600 14px Arial, Helvetica, sans-serif';
+      context.fillText(`0${index + 1} / 05`, 708, 80);
+      context.textAlign = 'left';
+      context.fillStyle = rule;
+      context.fillRect(58, 128, 652, 2);
 
-    const lid = new THREE.Group();
-    lid.position.set(0, 1.45, -1.57);
-    lid.rotation.x = -0.135;
-    scanner.add(lid);
-    const lidShell = makeMesh(rounded(4.68, 0.2, 3.26, 0.12), chassisMaterial, lid);
-    lidShell.position.set(0, 0.12, 1.52);
-    const lidUnderside = makeMesh(rounded(4.3, 0.04, 2.9, 0.04), undersideMaterial, lid);
-    lidUnderside.position.set(0, 0.005, 1.52);
-    const lidInset = makeMesh(rounded(3.98, 0.018, 2.58, 0.035), lowerMaterial, lid, false);
-    lidInset.position.set(0, -0.024, 1.52);
+      context.fillStyle = ink;
+      context.font = '700 43px Arial, Helvetica, sans-serif';
+      context.fillText(titles[index], 58, 199);
+      context.fillStyle = secondary;
+      context.font = '18px Arial, Helvetica, sans-serif';
+      context.fillText('Capture, refine and organize every detail.', 60, 237);
 
-    const hingeGeometry = trackGeometry(new THREE.CylinderGeometry(0.115, 0.115, 4.12, 20));
-    const hinge = makeMesh(hingeGeometry, darkTrimMaterial, scanner);
-    hinge.rotation.z = Math.PI / 2;
-    hinge.position.set(0, 1.46, -1.61);
-    const hingeCapGeometry = trackGeometry(new THREE.CylinderGeometry(0.145, 0.145, 0.16, 20));
-    for (const x of [-2.13, 2.13]) {
-      const cap = makeMesh(hingeCapGeometry, trimMaterial, scanner);
-      cap.rotation.z = Math.PI / 2;
-      cap.position.set(x, 1.46, -1.61);
-    }
+      const paragraphWidths = [646, 615, 652, 575, 638, 602, 510];
+      paragraphWidths.forEach((width, line) => {
+        context.fillStyle = line % 3 === 0 ? secondary : faint;
+        context.fillRect(60, 278 + line * 23, width, line % 3 === 0 ? 5 : 6);
+      });
 
-    const outputSlot = makeMesh(rounded(3.62, 0.29, 0.065, 0.055), slotMaterial, scanner, false);
-    outputSlot.position.set(-0.25, 0.88, 1.758);
-    const slotLip = makeMesh(rounded(3.55, 0.065, 0.16, 0.025), darkTrimMaterial, scanner);
-    slotLip.position.set(-0.25, 0.72, 1.8);
-    const outputTray = makeMesh(rounded(3.68, 0.075, 0.92, 0.04), lowerMaterial, scanner);
-    outputTray.position.set(-0.25, 0.45, 2.04);
-    outputTray.rotation.x = -0.055;
-    const trayEdge = makeMesh(rounded(3.52, 0.07, 0.055, 0.02), darkTrimMaterial, scanner);
-    trayEdge.position.set(-0.25, 0.48, 2.49);
-
-    const rollerGeometry = trackGeometry(new THREE.CylinderGeometry(0.085, 0.085, 0.42, 14));
-    for (let index = 0; index < 7; index += 1) {
-      const roller = makeMesh(rollerGeometry, rubberMaterial, scanner);
-      roller.rotation.z = Math.PI / 2;
-      roller.position.set(-1.54 + index * 0.43, 0.91, 1.81);
-    }
-
-    const buttonGeometry = trackGeometry(new THREE.CylinderGeometry(0.125, 0.125, 0.075, 24));
-    const powerButton = makeMesh(buttonGeometry, darkTrimMaterial, scanner);
-    powerButton.rotation.x = Math.PI / 2;
-    powerButton.position.set(1.91, 0.84, 1.79);
-    const powerRing = makeMesh(trackGeometry(new THREE.TorusGeometry(0.068, 0.008, 6, 24)), trimMaterial, scanner, false);
-    powerRing.position.set(1.91, 0.84, 1.833);
-    const powerStroke = makeMesh(rounded(0.014, 0.062, 0.012, 0.005), trimMaterial, scanner, false);
-    powerStroke.position.set(1.91, 0.906, 1.837);
-
-    const smallButton = makeMesh(trackGeometry(new THREE.CylinderGeometry(0.075, 0.075, 0.055, 20)), lowerMaterial, scanner);
-    smallButton.rotation.x = Math.PI / 2;
-    smallButton.position.set(1.91, 0.55, 1.78);
-    const statusMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0xb8ef62,
-      emissive: 0x91d63e,
-      emissiveIntensity: 1.25,
-      metalness: 0.05,
-      roughness: 0.28,
-    }));
-    const statusLight = makeMesh(trackGeometry(new THREE.SphereGeometry(0.036, 16, 10)), statusMaterial, scanner, false);
-    statusLight.position.set(1.91, 1.12, 1.765);
-
-    for (let index = 0; index < 5; index += 1) {
-      const vent = makeMesh(rounded(0.018, 0.035, 0.64, 0.008), slotMaterial, scanner, false);
-      vent.position.set(2.405, 0.54 + index * 0.09, -0.58);
-    }
-
-    const screwGeometry = trackGeometry(new THREE.CylinderGeometry(0.035, 0.035, 0.018, 12));
-    for (const x of [-2.15, 2.15]) {
-      for (const z of [-1.46, 1.43]) {
-        const screw = makeMesh(screwGeometry, trimMaterial, scanner, false);
-        screw.position.set(x, 1.458, z);
+      if (index === 0 || index === 3) {
+        context.fillStyle = rule;
+        context.fillRect(58, 480, 650, 2);
+        context.fillStyle = ink;
+        context.font = '700 21px Arial, Helvetica, sans-serif';
+        context.fillText(index === 0 ? 'DOCUMENT OVERVIEW' : 'WEEKLY ACTIVITY', 60, 523);
+        context.strokeStyle = rule;
+        context.lineWidth = 2;
+        context.strokeRect(60, 552, 394, 245);
+        for (let grid = 1; grid < 4; grid += 1) {
+          context.fillStyle = '#e0e4e5';
+          context.fillRect(77, 552 + grid * 55, 360, 1);
+        }
+        const values = index === 0 ? [72, 119, 94, 156, 135, 185] : [48, 83, 128, 102, 169, 193];
+        values.forEach((value, bar) => {
+          context.fillStyle = bar === values.length - 1 ? teal : (clean ? '#657176' : '#91a0a5');
+          context.fillRect(84 + bar * 56, 772 - value, 30, value);
+        });
+        context.fillStyle = teal;
+        context.fillRect(492, 552, 216, 9);
+        context.fillStyle = ink;
+        context.font = '700 37px Arial, Helvetica, sans-serif';
+        context.fillText(index === 0 ? '98.4%' : '+24%', 492, 615);
+        context.fillStyle = secondary;
+        context.font = '15px Arial, Helvetica, sans-serif';
+        context.fillText(index === 0 ? 'TEXT CONFIDENCE' : 'PAGES PROCESSED', 492, 643);
+        for (let line = 0; line < 5; line += 1) {
+          context.fillStyle = line === 0 ? secondary : faint;
+          context.fillRect(492, 682 + line * 23, 205 - (line % 3) * 30, 6);
+        }
+      } else if (index === 1) {
+        context.fillStyle = ink;
+        context.font = '700 21px Arial, Helvetica, sans-serif';
+        context.fillText('CAPTURE CHECKLIST', 60, 510);
+        const checks = ['Align the document edges', 'Preserve the original detail', 'Remove visual distractions', 'Export a clean digital copy'];
+        checks.forEach((label, item) => {
+          const y = 560 + item * 65;
+          context.strokeStyle = item < 3 ? teal : faint;
+          context.lineWidth = 3;
+          context.strokeRect(62, y - 19, 24, 24);
+          if (item < 3) {
+            context.beginPath();
+            context.moveTo(67, y - 7);
+            context.lineTo(74, y);
+            context.lineTo(85, y - 14);
+            context.stroke();
+          }
+          context.fillStyle = ink;
+          context.font = '19px Arial, Helvetica, sans-serif';
+          context.fillText(label, 108, y);
+          context.fillStyle = rule;
+          context.fillRect(108, y + 17, 550 - item * 35, 2);
+        });
+      } else if (index === 2) {
+        context.fillStyle = ink;
+        context.font = '700 21px Arial, Helvetica, sans-serif';
+        context.fillText('PROJECT MILESTONES', 60, 510);
+        for (let row = 0; row < 4; row += 1) {
+          const y = 550 + row * 65;
+          context.fillStyle = row === 0 ? teal : (clean ? '#e1e5e6' : '#d5dcde');
+          context.fillRect(60, y, 648, 48);
+          context.fillStyle = row === 0 ? '#ffffff' : ink;
+          context.font = '600 16px Arial, Helvetica, sans-serif';
+          context.fillText(['01   Source captured', '02   Pages organized', '03   Details enhanced', '04   Ready to share'][row], 78, y + 30);
+          context.textAlign = 'right';
+          context.fillText(row < 3 ? 'COMPLETE' : 'READY', 686, y + 30);
+          context.textAlign = 'left';
+        }
+      } else {
+        context.fillStyle = ink;
+        context.font = '700 21px Arial, Helvetica, sans-serif';
+        context.fillText('NEXT ACTIONS', 60, 510);
+        for (let item = 0; item < 5; item += 1) {
+          const y = 559 + item * 51;
+          context.fillStyle = teal;
+          context.font = '700 16px Arial, Helvetica, sans-serif';
+          context.fillText(`0${item + 1}`, 60, y);
+          context.fillStyle = secondary;
+          context.fillRect(108, y - 13, 560 - (item % 3) * 65, 7);
+          context.fillStyle = rule;
+          context.fillRect(108, y + 7, 480 - (item % 2) * 90, 4);
+        }
       }
-    }
 
-    const printCanvas = document.createElement('canvas');
-    printCanvas.width = 640;
-    printCanvas.height = 880;
-    const printContext = printCanvas.getContext('2d');
-    if (!printContext) throw new Error('Canvas textures are unavailable');
-    printContext.fillStyle = '#f4f0e6';
-    printContext.fillRect(0, 0, 640, 880);
-    printContext.fillStyle = '#263238';
-    printContext.font = '700 31px Arial, sans-serif';
-    printContext.fillText('PDF TOOLBOX', 62, 82);
-    printContext.fillStyle = '#758078';
-    printContext.font = '15px Arial, sans-serif';
-    printContext.fillText('DOCUMENT / SCAN 01', 64, 111);
-    printContext.fillStyle = '#a6c86a';
-    printContext.fillRect(62, 135, 516, 5);
-    printContext.fillStyle = '#4b5352';
-    printContext.font = '600 20px Arial, sans-serif';
-    printContext.fillText('A clearer digital original.', 62, 190);
-    const lineWidths = [500, 476, 507, 423, 494, 452];
-    lineWidths.forEach((width, index) => {
-      printContext.fillStyle = index % 2 ? '#c6c7bf' : '#afb4ae';
-      printContext.fillRect(62, 225 + index * 23, width, 6);
-    });
-    printContext.strokeStyle = '#8d9690';
-    printContext.lineWidth = 3;
-    printContext.strokeRect(62, 405, 240, 177);
-    printContext.strokeStyle = '#b3bdB5';
-    printContext.lineWidth = 2;
-    printContext.beginPath();
-    printContext.moveTo(84, 544);
-    printContext.lineTo(137, 483);
-    printContext.lineTo(183, 514);
-    printContext.lineTo(274, 435);
-    printContext.stroke();
-    printContext.fillStyle = '#a6c86a';
-    printContext.beginPath();
-    printContext.arc(274, 435, 7, 0, Math.PI * 2);
-    printContext.fill();
-    printContext.fillStyle = '#3f4847';
-    printContext.font = '600 17px Arial, sans-serif';
-    printContext.fillText('SCAN NOTES', 340, 420);
-    for (let index = 0; index < 6; index += 1) {
-      printContext.fillStyle = index === 0 ? '#98a199' : '#c2c5bd';
-      printContext.fillRect(340, 447 + index * 23, index === 5 ? 135 : 220 - (index % 3) * 24, 6);
-    }
-    printContext.fillStyle = '#aeb4ac';
-    for (let index = 0; index < 5; index += 1) {
-      printContext.fillRect(62, 640 + index * 25, 506 - (index % 2) * 62, 6);
-    }
-    printContext.fillStyle = '#7b857e';
-    printContext.font = '13px Arial, sans-serif';
-    printContext.fillText('CAPTURE  •  CLEAN  •  EXPORT', 62, 820);
+      context.fillStyle = rule;
+      context.fillRect(58, 864, 650, 2);
+      context.fillStyle = secondary;
+      context.font = '600 13px Arial, Helvetica, sans-serif';
+      context.fillText('CAPTURE  /  CLEAN  /  ORGANIZE  /  EXPORT', 60, 905);
+      context.fillStyle = faint;
+      context.font = '13px Arial, Helvetica, sans-serif';
+      context.fillText('A considered workspace for your documents.', 60, 936);
+      context.fillStyle = teal;
+      context.fillRect(60, 970, 64, 5);
+      context.fillStyle = faint;
+      context.fillRect(135, 970, 573, 2);
+      return printCanvas;
+    };
 
-    const paperTexture = new THREE.CanvasTexture(printCanvas);
-    textures.add(paperTexture);
-    paperTexture.colorSpace = THREE.SRGBColorSpace;
-    paperTexture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-    const paperMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0xfffdf5,
-      map: paperTexture,
-      metalness: 0,
-      roughness: 0.86,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 1,
-    }));
+    const createTexture = (index: number, clean: boolean): THREE.CanvasTexture => {
+      const texture = trackTexture(new THREE.CanvasTexture(drawDocument(index, clean)));
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = Math.min(8, renderer?.capabilities.getMaxAnisotropy() ?? 1);
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    };
 
-    const createPaperGeometry = (): THREE.BufferGeometry => {
-      const widthSegments = 6;
+    const paperHeight = (u: number, t: number): number => {
+      const longCurl = 0.07 * Math.sin(t * Math.PI) + 0.045 * t * t;
+      const sideCurl = 0.036 * Math.pow(Math.abs(u - 0.5) * 2, 3) * Math.sin(t * Math.PI);
+      return longCurl + sideCurl;
+    };
+
+    const createPaperGeometry = (topOnly = false): THREE.BufferGeometry => {
+      const widthSegments = 10;
       const lengthSegments = 28;
-      const width = 2.78;
-      const length = 3.05;
-      const thickness = 0.014;
       const positions: number[] = [];
       const uvs: number[] = [];
       const indices: number[] = [];
@@ -362,17 +396,22 @@ export function mountScannerScene(host: HTMLElement): () => void {
         const t = row / lengthSegments;
         for (let column = 0; column <= widthSegments; column += 1) {
           const u = column / widthSegments;
-          const x = (u - 0.5) * width;
-          const edgeCurl = 0.018 * Math.pow(Math.abs(u - 0.5) * 2, 3) * Math.sin(t * Math.PI);
-          const y = 0.025 * Math.sin(t * Math.PI * 1.4) - 0.19 * t * t * t + edgeCurl;
-          const z = t * length;
-          positions.push(x, y + thickness / 2, z, x, y - thickness / 2, z);
-          uvs.push(u, 1 - t, u, 1 - t);
+          const x = (u - 0.5) * PAGE_WIDTH;
+          const y = paperHeight(u, t);
+          const z = (t - 0.5) * PAGE_LENGTH;
+          if (topOnly) {
+            positions.push(x, y + PAGE_THICKNESS / 2 + 0.0015, z);
+            uvs.push(u, 1 - t);
+          } else {
+            positions.push(x, y + PAGE_THICKNESS / 2, z, x, y - PAGE_THICKNESS / 2, z);
+            uvs.push(u, 1 - t, u, 1 - t);
+          }
         }
       }
 
       const vertex = (row: number, column: number, bottom = false): number =>
-        (row * stride + column) * 2 + (bottom ? 1 : 0);
+        (row * stride + column) * (topOnly ? 1 : 2) + (bottom ? 1 : 0);
+      const topStart = indices.length;
       for (let row = 0; row < lengthSegments; row += 1) {
         for (let column = 0; column < widthSegments; column += 1) {
           const a = vertex(row, column);
@@ -380,9 +419,29 @@ export function mountScannerScene(host: HTMLElement): () => void {
           const c = vertex(row + 1, column);
           const d = vertex(row + 1, column + 1);
           indices.push(a, c, b, b, c, d);
-          indices.push(a + 1, b + 1, c + 1, b + 1, d + 1, c + 1);
         }
       }
+      if (topOnly) {
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        return trackGeometry(geometry);
+      }
+
+      const bottomStart = indices.length;
+      for (let row = 0; row < lengthSegments; row += 1) {
+        for (let column = 0; column < widthSegments; column += 1) {
+          const a = vertex(row, column, true);
+          const b = vertex(row, column + 1, true);
+          const c = vertex(row + 1, column, true);
+          const d = vertex(row + 1, column + 1, true);
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+      const edgeStart = indices.length;
       for (let row = 0; row < lengthSegments; row += 1) {
         const left = vertex(row, 0);
         const nextLeft = vertex(row + 1, 0);
@@ -404,66 +463,331 @@ export function mountScannerScene(host: HTMLElement): () => void {
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geometry.setIndex(indices);
+      geometry.addGroup(topStart, bottomStart - topStart, 0);
+      geometry.addGroup(bottomStart, edgeStart - bottomStart, 1);
+      geometry.addGroup(edgeStart, indices.length - edgeStart, 2);
       geometry.computeVertexNormals();
       geometry.computeBoundingSphere();
       return trackGeometry(geometry);
     };
 
-    const paper = makeMesh(createPaperGeometry(), paperMaterial, scanner);
-    paper.position.set(-0.25, 0.845, -0.4);
+    const paperGeometry = createPaperGeometry();
+    const cleanGeometry = createPaperGeometry(true);
+    const backMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0xd9dfe0,
+      roughness: 0.94,
+      metalness: 0,
+    }));
+    const edgeMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0xf0f3f2,
+      roughness: 0.88,
+      metalness: 0,
+    }));
+
+    const pages: THREE.Group[] = [];
+    const pickMeshes: THREE.Mesh[] = [];
+    const cleanMaterials: THREE.MeshStandardMaterial[] = [];
+    for (let index = 0; index < PAGE_COUNT; index += 1) {
+      const group = new THREE.Group();
+      group.name = `document-page-${index + 1}`;
+      scene.add(group);
+      const sourceMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: createTexture(index, false),
+        roughness: 0.91,
+        metalness: 0,
+      }));
+      const paper = makeMesh(paperGeometry, [sourceMaterial, backMaterial, edgeMaterial], group);
+      paper.userData.pageIndex = index;
+      pickMeshes.push(paper);
+      const cleanMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        map: createTexture(index, true),
+        roughness: 0.78,
+        metalness: 0,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      }));
+      const cleanSurface = makeMesh(cleanGeometry, cleanMaterial, group, false, true);
+      cleanSurface.renderOrder = 2 + index;
+      cleanMaterials.push(cleanMaterial);
+      pages.push(group);
+    }
+
+    const bracketMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0x45aaa5,
+      roughness: 0.7,
+      metalness: 0.08,
+      transparent: true,
+      opacity: 1,
+    }));
+    const outlineMaterial = trackMaterial(new THREE.LineBasicMaterial({
+      color: 0x63bcb5,
+      transparent: true,
+      opacity: 0.8,
+    }));
+    const cropRig = new THREE.Group();
+    cropRig.name = 'crop-guides';
+    scene.add(cropRig);
+    const outlineGeometry = trackGeometry(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-PAGE_WIDTH / 2 - 0.08, 0, -PAGE_LENGTH / 2 - 0.08),
+      new THREE.Vector3(PAGE_WIDTH / 2 + 0.08, 0, -PAGE_LENGTH / 2 - 0.08),
+      new THREE.Vector3(PAGE_WIDTH / 2 + 0.08, 0, PAGE_LENGTH / 2 + 0.08),
+      new THREE.Vector3(-PAGE_WIDTH / 2 - 0.08, 0, PAGE_LENGTH / 2 + 0.08),
+    ]));
+    const cropOutline = new THREE.LineLoop(outlineGeometry, outlineMaterial);
+    cropRig.add(cropOutline);
+    const horizontalBracket = trackGeometry(new THREE.BoxGeometry(0.4, 0.034, 0.045));
+    const verticalBracket = trackGeometry(new THREE.BoxGeometry(0.045, 0.034, 0.4));
+    for (const xSign of [-1, 1]) {
+      for (const zSign of [-1, 1]) {
+        const horizontal = makeMesh(horizontalBracket, bracketMaterial, cropRig, false, false);
+        horizontal.position.set(xSign * (PAGE_WIDTH / 2 + 0.08 - 0.18), 0.018, zSign * (PAGE_LENGTH / 2 + 0.08));
+        const vertical = makeMesh(verticalBracket, bracketMaterial, cropRig, false, false);
+        vertical.position.set(xSign * (PAGE_WIDTH / 2 + 0.08), 0.018, zSign * (PAGE_LENGTH / 2 + 0.08 - 0.18));
+      }
+    }
+
+    const outputGroup = new THREE.Group();
+    outputGroup.name = 'pdf-output-page';
+    scene.add(outputGroup);
+    const outputBackingMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0x323c40,
+      roughness: 0.86,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0,
+    }));
+    const outputTopMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      map: createTexture(0, true),
+      roughness: 0.82,
+      metalness: 0,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    }));
+    const outputBacking = makeMesh(
+      trackGeometry(new THREE.BoxGeometry(1.78, 0.065, 2.38)),
+      outputBackingMaterial,
+      outputGroup,
+      true,
+      true,
+    );
+    outputBacking.position.y = 0.012;
+    const outputTop = makeMesh(
+      trackGeometry(new THREE.PlaneGeometry(1.72, 2.3)),
+      outputTopMaterial,
+      outputGroup,
+      false,
+      true,
+    );
+    outputTop.rotation.x = -Math.PI / 2;
+    outputTop.position.y = 0.047;
+    outputTop.renderOrder = 9;
+    const badgeCanvas = document.createElement('canvas');
+    badgeCanvas.width = 256;
+    badgeCanvas.height = 128;
+    const badgeContext = badgeCanvas.getContext('2d');
+    if (!badgeContext) throw new Error('Canvas textures are unavailable');
+    badgeContext.fillStyle = '#167d7c';
+    badgeContext.fillRect(0, 0, 256, 128);
+    badgeContext.fillStyle = '#ffffff';
+    badgeContext.font = '700 62px Arial, Helvetica, sans-serif';
+    badgeContext.textAlign = 'center';
+    badgeContext.fillText('PDF', 128, 84);
+    const badgeTexture = trackTexture(new THREE.CanvasTexture(badgeCanvas));
+    badgeTexture.colorSpace = THREE.SRGBColorSpace;
+    const badgeMaterial = trackMaterial(new THREE.MeshBasicMaterial({
+      map: badgeTexture,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      toneMapped: false,
+    }));
+    const badge = makeMesh(trackGeometry(new THREE.PlaneGeometry(0.62, 0.31)), badgeMaterial, outputGroup, false, false);
+    badge.rotation.x = -Math.PI / 2;
+    badge.position.set(0.39, 0.05, 0.83);
+    badge.renderOrder = 10;
+
+    const workPlaneMaterial = trackMaterial(new THREE.MeshStandardMaterial({
+      color: 0x20272a,
+      roughness: 0.97,
+      metalness: 0.03,
+    }));
+    const workPlane = makeMesh(
+      trackGeometry(new THREE.BoxGeometry(8.8, 0.16, 7.25)),
+      workPlaneMaterial,
+      scene,
+      false,
+      true,
+    );
+    workPlane.position.set(0, -0.12, 0.12);
+
+    const gridPoints: THREE.Vector3[] = [];
+    for (let x = -4; x <= 4; x += 1) {
+      gridPoints.push(new THREE.Vector3(x, -0.036, -3.25), new THREE.Vector3(x, -0.036, 3.5));
+    }
+    for (let z = -3; z <= 3; z += 1) {
+      gridPoints.push(new THREE.Vector3(-4.15, -0.036, z), new THREE.Vector3(4.15, -0.036, z));
+    }
+    for (const x of [-3.75, 3.75]) {
+      for (const z of [-2.85, 3.05]) {
+        gridPoints.push(
+          new THREE.Vector3(x - 0.18, -0.033, z), new THREE.Vector3(x + 0.18, -0.033, z),
+          new THREE.Vector3(x, -0.033, z - 0.18), new THREE.Vector3(x, -0.033, z + 0.18),
+        );
+      }
+    }
+    const gridMaterial = trackMaterial(new THREE.LineBasicMaterial({
+      color: 0x647277,
+      transparent: true,
+      opacity: 0.19,
+    }));
+    const grid = new THREE.LineSegments(trackGeometry(new THREE.BufferGeometry().setFromPoints(gridPoints)), gridMaterial);
+    scene.add(grid);
 
     const groundMaterial = trackMaterial(new THREE.MeshStandardMaterial({
-      color: 0xe9e8e2,
-      roughness: 0.96,
+      color: 0x111719,
+      roughness: 1,
+      metalness: 0,
     }));
-    const ground = makeMesh(trackGeometry(new THREE.PlaneGeometry(50, 50)), groundMaterial, scene, false);
+    const ground = makeMesh(trackGeometry(new THREE.PlaneGeometry(60, 60)), groundMaterial, scene, false, true);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = 0.005;
+    ground.position.y = -0.215;
 
-    const hemisphere = new THREE.HemisphereLight(0xfff1d8, 0x253039, 1.65);
+    const hemisphere = new THREE.HemisphereLight(0xe2edf2, 0x172025, 1.65);
     scene.add(hemisphere);
-    const keyLight = new THREE.DirectionalLight(0xffdfb5, 3.4);
-    keyLight.position.set(-3.8, 7.5, 5.2);
+    const keyLight = new THREE.DirectionalLight(0xe7f0f4, 3.25);
+    keyLight.position.set(-3.8, 8.5, 5.5);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.mapSize.set(1536, 1536);
     keyLight.shadow.camera.left = -6;
     keyLight.shadow.camera.right = 6;
     keyLight.shadow.camera.top = 6;
     keyLight.shadow.camera.bottom = -6;
     keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = 20;
-    keyLight.shadow.bias = -0.00025;
-    keyLight.shadow.normalBias = 0.025;
+    keyLight.shadow.camera.far = 22;
+    keyLight.shadow.bias = -0.0002;
+    keyLight.shadow.normalBias = 0.018;
     keyLight.shadow.radius = 3;
     scene.add(keyLight);
     cleanupTasks.push(() => keyLight.shadow.dispose());
-    const fillLight = new THREE.DirectionalLight(0xc9ddf2, 1.25);
-    fillLight.position.set(5, 3.8, -3.5);
+    const fillLight = new THREE.DirectionalLight(0xbfd5e2, 1.35);
+    fillLight.position.set(5, 4.5, -2.5);
     scene.add(fillLight);
-    const rimLight = new THREE.DirectionalLight(0xffedD5, 0.8);
+    const rimLight = new THREE.DirectionalLight(0xd9e5e9, 0.8);
     rimLight.position.set(-4, 3, -5);
     scene.add(rimLight);
 
-    const continuousMotion = (): boolean =>
-      finePointer.matches && !coarsePointer.matches && !reducedMotion.matches && window.innerWidth >= 700;
     const canRender = (): boolean =>
       !disposed && !contextLost && hasSize && inViewport && welcomeVisible && !document.hidden;
 
-    const updateCamera = (autoYaw = 0): void => {
-      const orbitYaw = yaw + autoYaw;
-      const distance = defaultDistance * cameraFit;
-      const horizontal = Math.cos(pitch) * distance;
+    const updateCamera = (): void => {
+      const horizontal = Math.cos(pitch) * fittedDistance;
       camera.position.set(
-        target.x + Math.sin(orbitYaw) * horizontal,
-        target.y + Math.sin(pitch) * distance,
-        target.z + Math.cos(orbitYaw) * horizontal,
+        target.x + Math.sin(yaw) * horizontal,
+        target.y + Math.sin(pitch) * fittedDistance,
+        target.z + Math.cos(yaw) * horizontal,
       );
       camera.lookAt(target);
+      camera.updateMatrixWorld();
+    };
+
+    const poseForPage = (index: number): Pose => {
+      const offset = index - (PAGE_COUNT - 1) / 2;
+      const selected = index === selectedPage;
+      if (mode === 'crop') {
+        return {
+          x: offset * 0.025,
+          y: 0.055 + index * 0.042 + (selected ? 0.17 : 0),
+          z: offset * -0.018 + (selected ? 0.16 : 0),
+          rx: 0,
+          ry: 0,
+          rz: offset * 0.004,
+        };
+      }
+      if (mode === 'enhanced') {
+        return {
+          x: selected ? -0.45 : -0.45 + offset * 0.018,
+          y: selected ? 0.77 : 0.025 + index * 0.027,
+          z: selected ? 0.03 : -0.08,
+          rx: 0,
+          ry: 0,
+          rz: 0,
+        };
+      }
+      if (!fanOpen) {
+        return {
+          x: offset * 0.018,
+          y: 0.045 + index * 0.034 + (selected ? 0.19 : 0),
+          z: (selected ? 0.27 : 0),
+          rx: 0,
+          ry: 0,
+          rz: offset * 0.003,
+        };
+      }
+      return {
+        x: offset * 0.88 + (selected ? 0.06 : 0),
+        y: 0.04 + index * 0.085 + (selected ? 0.85 : 0),
+        z: offset * 0.28 + (selected ? 0.45 : 0),
+        rx: selected ? -0.08 : 0,
+        ry: offset * -0.25,
+        rz: offset * -0.035,
+      };
+    };
+
+    const readPoses = (): Pose[] => pages.map((page) => ({
+      x: page.position.x,
+      y: page.position.y,
+      z: page.position.z,
+      rx: page.rotation.x,
+      ry: page.rotation.y,
+      rz: page.rotation.z,
+    }));
+
+    const applyPose = (page: THREE.Group, pose: Pose): void => {
+      page.position.set(pose.x, pose.y, pose.z);
+      page.rotation.set(pose.rx, pose.ry, pose.rz);
+    };
+
+    const updateAttachedDetails = (): void => {
+      const selected = pages[selectedPage];
+      cropRig.position.copy(selected.position);
+      cropRig.rotation.copy(selected.rotation);
+      cropRig.position.y += 0.085;
+      cropRig.visible = mode === 'crop' && !contextLost;
+      const bracketOpacity = transition?.kind === 'layout'
+        ? clamp((performance.now() - transition.start) / Math.max(1, transition.duration), 0, 1)
+        : 1;
+      bracketMaterial.opacity = mode === 'crop' ? bracketOpacity : 0;
+      outlineMaterial.opacity = mode === 'crop' ? bracketOpacity * 0.78 : 0;
+
+      outputGroup.visible = outputAmount > 0.002 && !contextLost;
+      outputGroup.position.set(2.13, 0.16 + outputAmount * 0.28, -0.18);
+      outputGroup.rotation.set(0, -0.13, 0);
+      outputGroup.scale.setScalar(0.78 + outputAmount * 0.22);
+      outputBackingMaterial.opacity = outputAmount;
+      outputTopMaterial.opacity = outputAmount;
+      badgeMaterial.opacity = outputAmount;
+    };
+
+    const applyVisuals = (): void => {
+      cleanMaterials.forEach((material, index) => {
+        material.opacity = index === selectedPage ? cleanAmount : 0;
+        material.visible = material.opacity > 0.001;
+      });
+      updateAttachedDetails();
     };
 
     const renderFrame = (): boolean => {
       if (!renderer || disposed || contextLost) return false;
       try {
+        scene.updateMatrixWorld();
         renderer.render(scene, camera);
         if (!disposed && !contextLost && !host.classList.contains('is-webgl-ready')) {
           host.classList.add('is-webgl-ready');
@@ -477,41 +801,224 @@ export function mountScannerScene(host: HTMLElement): () => void {
       }
     };
 
-    const scheduleFrame = (): void => {
-      if (!frameId && canRender()) frameId = requestAnimationFrame(onFrame);
+    const settlePoses = (): void => {
+      pages.forEach((page, index) => applyPose(page, poseForPage(index)));
     };
 
-    const onFrame = (time: number): void => {
+    function onFrame(time: number): void {
       frameId = 0;
       if (!canRender()) {
         lastTime = 0;
         return;
       }
-      const animated = continuousMotion();
-      if (animated) {
-        const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.05) : 0;
-        elapsed += delta;
-        const cycle = (elapsed % 8) / 8;
-        const feed = smoothstep(cycle, 0.04, 0.86);
-        paper.position.z = -1.15 + feed * 1.5;
-        paperMaterial.opacity = smoothstep(cycle, 0, 0.045) * (1 - smoothstep(cycle, 0.91, 1));
-        updateCamera(Math.sin(elapsed * 0.22) * 0.045);
-      } else {
-        paper.position.z = -0.4;
-        paperMaterial.opacity = 1;
-        updateCamera();
-      }
+      const delta = lastTime ? Math.min((time - lastTime) / 1000, 0.05) : 1 / 60;
       lastTime = time;
-      if (renderFrame() && animated) scheduleFrame();
-    };
+      let active = false;
 
-    const updateActivity = (): void => {
-      if (!canRender()) {
-        if (frameId) cancelAnimationFrame(frameId);
-        frameId = 0;
-        lastTime = 0;
+      if (transition) {
+        const raw = clamp((time - transition.start) / transition.duration, 0, 1);
+        const eased = raw * raw * (3 - 2 * raw);
+        pages.forEach((page, index) => {
+          const from = transition?.from[index];
+          const to = transition?.to[index];
+          if (!from || !to) return;
+          applyPose(page, {
+            x: THREE.MathUtils.lerp(from.x, to.x, eased),
+            y: THREE.MathUtils.lerp(from.y, to.y, eased),
+            z: THREE.MathUtils.lerp(from.z, to.z, eased),
+            rx: THREE.MathUtils.lerp(from.rx, to.rx, eased),
+            ry: THREE.MathUtils.lerp(from.ry, to.ry, eased),
+            rz: THREE.MathUtils.lerp(from.rz, to.rz, eased),
+          });
+        });
+        cleanAmount = THREE.MathUtils.lerp(transition.cleanFrom, transition.cleanTo, eased);
+        outputAmount = THREE.MathUtils.lerp(transition.outputFrom, transition.outputTo, eased);
+        active = raw < 1;
+        if (!active) {
+          const wasEnhanced = transition.kind === 'enhanced';
+          transition = null;
+          settlePoses();
+          cleanAmount = mode === 'enhanced' ? 1 : 0;
+          outputAmount = mode === 'enhanced' ? 1 : 0;
+          if (wasEnhanced) host.dataset.sceneTransition = 'idle';
+        }
+      }
+
+      const damping = reducedMotion.matches ? 1 : 1 - Math.exp(-delta * 13);
+      const yawDifference = orbitYaw - yaw;
+      const pitchDifference = orbitPitch - pitch;
+      if (Math.abs(yawDifference) > 0.00005 || Math.abs(pitchDifference) > 0.00005) {
+        yaw += yawDifference * damping;
+        pitch += pitchDifference * damping;
+        if (Math.abs(orbitYaw - yaw) < 0.00005 && Math.abs(orbitPitch - pitch) < 0.00005) {
+          yaw = orbitYaw;
+          pitch = orbitPitch;
+        } else {
+          active = true;
+        }
+        host.dataset.rotation = THREE.MathUtils.radToDeg(yaw - defaultYaw).toFixed(2);
+      }
+      updateCamera();
+      applyVisuals();
+      if (renderFrame() && active) scheduleFrame();
+    }
+
+    function scheduleFrame(): void {
+      if (!frameId && canRender()) frameId = requestAnimationFrame(onFrame);
+    }
+
+    const requestSettle = (): void => {
+      if (reducedMotion.matches) {
+        transition = null;
+        settlePoses();
+        cleanAmount = mode === 'enhanced' ? 1 : 0;
+        outputAmount = mode === 'enhanced' ? 1 : 0;
+        host.dataset.sceneTransition = 'idle';
+        updateCamera();
+        applyVisuals();
+        scheduleFrame();
         return;
       }
+      scheduleFrame();
+    };
+
+    const startLayoutTransition = (animate = true): void => {
+      const to = pages.map((_, index) => poseForPage(index));
+      if (!animate || reducedMotion.matches) {
+        transition = null;
+        settlePoses();
+        cleanAmount = mode === 'enhanced' ? 1 : 0;
+        outputAmount = mode === 'enhanced' ? 1 : 0;
+        host.dataset.sceneTransition = 'idle';
+      } else {
+        transition = {
+          kind: 'layout',
+          start: performance.now(),
+          duration: 460,
+          from: readPoses(),
+          to,
+          cleanFrom: cleanAmount,
+          cleanTo: 0,
+          outputFrom: outputAmount,
+          outputTo: 0,
+        };
+        cleanAmount = 0;
+        outputAmount = 0;
+        host.dataset.sceneTransition = 'idle';
+      }
+      applyVisuals();
+      requestSettle();
+    };
+
+    const selectPage = (index: number): void => {
+      if (disposed || !Number.isInteger(index)) return;
+      const next = clamp(index, 0, PAGE_COUNT - 1);
+      if (next === selectedPage) return;
+      selectedPage = next;
+      host.dataset.selectedPage = String(selectedPage + 1);
+      // Selection is reflected in state and picking immediately, even during a move.
+      startLayoutTransition(mode !== 'enhanced');
+      if (mode === 'enhanced') {
+        cleanMaterials.forEach((material, pageIndex) => { material.opacity = pageIndex === selectedPage ? 1 : 0; });
+        pages.forEach((page, pageIndex) => applyPose(page, poseForPage(pageIndex)));
+        outputTopMaterial.map?.dispose();
+        textures.delete(outputTopMaterial.map as THREE.Texture);
+        outputTopMaterial.map = createTexture(selectedPage, true);
+        outputTopMaterial.needsUpdate = true;
+        outputAmount = 1;
+        applyVisuals();
+        scheduleFrame();
+      }
+    };
+
+    const toggleFan = (): void => {
+      if (disposed) return;
+      fanOpen = !fanOpen;
+      host.dataset.fan = fanOpen ? 'open' : 'closed';
+      startLayoutTransition();
+    };
+
+    const setMode = (nextMode: SceneMode): void => {
+      if (disposed || nextMode === mode) return;
+      const previousMode = mode;
+      mode = nextMode;
+      host.dataset.sceneState = mode;
+      if (nextMode === 'enhanced') {
+        cropRig.visible = false;
+        bracketMaterial.opacity = 0;
+        outlineMaterial.opacity = 0;
+        if (reducedMotion.matches) {
+          transition = null;
+          settlePoses();
+          cleanAmount = 1;
+          outputAmount = 1;
+          host.dataset.sceneTransition = 'idle';
+        } else {
+          transition = {
+            kind: 'enhanced',
+            start: performance.now(),
+            duration: 720,
+            from: readPoses(),
+            to: pages.map((_, index) => poseForPage(index)),
+            cleanFrom: cleanAmount,
+            cleanTo: 1,
+            outputFrom: outputAmount,
+            outputTo: 1,
+          };
+          host.dataset.sceneTransition = 'enhancing';
+        }
+        updateAttachedDetails();
+        scheduleFrame();
+        return;
+      }
+
+      const wasEnhanced = previousMode === 'enhanced' || transition?.kind === 'enhanced';
+      if (reducedMotion.matches) {
+        transition = null;
+        settlePoses();
+        cleanAmount = 0;
+        outputAmount = 0;
+        host.dataset.sceneTransition = 'idle';
+      } else {
+        transition = {
+          kind: wasEnhanced ? 'enhanced' : 'layout',
+          start: performance.now(),
+          duration: wasEnhanced ? 600 : 440,
+          from: readPoses(),
+          to: pages.map((_, index) => poseForPage(index)),
+          cleanFrom: cleanAmount,
+          cleanTo: 0,
+          outputFrom: outputAmount,
+          outputTo: 0,
+        };
+        host.dataset.sceneTransition = wasEnhanced ? 'enhancing' : 'idle';
+      }
+      applyVisuals();
+      scheduleFrame();
+    };
+
+    const reset = (): void => {
+      if (disposed) return;
+      selectedPage = 0;
+      fanOpen = true;
+      mode = 'fan';
+      transition = null;
+      cleanAmount = 0;
+      outputAmount = 0;
+      yaw = orbitYaw = defaultYaw;
+      pitch = orbitPitch = defaultPitch;
+      host.dataset.rotation = '0.00';
+      host.dataset.sceneState = mode;
+      host.dataset.selectedPage = '1';
+      host.dataset.fan = 'open';
+      host.dataset.sceneTransition = 'idle';
+      outputTopMaterial.map?.dispose();
+      textures.delete(outputTopMaterial.map as THREE.Texture);
+      outputTopMaterial.map = createTexture(0, true);
+      outputTopMaterial.needsUpdate = true;
+      settlePoses();
+      updateCamera();
+      applyVisuals();
       scheduleFrame();
     };
 
@@ -522,7 +1029,8 @@ export function mountScannerScene(host: HTMLElement): () => void {
       const height = Math.max(0, bounds.height);
       hasSize = width > 1 && height > 1;
       if (!hasSize) {
-        updateActivity();
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = 0;
         return;
       }
       const mobile = coarsePointer.matches || window.innerWidth < 700;
@@ -538,7 +1046,8 @@ export function mountScannerScene(host: HTMLElement): () => void {
           renderHeight = Math.round(height);
         }
         camera.aspect = width / height;
-        cameraFit = camera.aspect < 1.15 ? 1.15 / camera.aspect : 1;
+        const narrowFit = camera.aspect < 1.28 ? 1.28 / camera.aspect : 1;
+        fittedDistance = cameraDistance * Math.min(narrowFit, 2.35);
         camera.updateProjectionMatrix();
         updateCamera();
       } catch {
@@ -546,7 +1055,17 @@ export function mountScannerScene(host: HTMLElement): () => void {
         host.dataset.webgl = 'fallback';
         return;
       }
-      updateActivity();
+      scheduleFrame();
+    };
+
+    const updateActivity = (): void => {
+      if (!canRender()) {
+        if (frameId) cancelAnimationFrame(frameId);
+        frameId = 0;
+        lastTime = 0;
+        return;
+      }
+      scheduleFrame();
     };
 
     let activePointer: number | null = null;
@@ -556,16 +1075,44 @@ export function mountScannerScene(host: HTMLElement): () => void {
     let previousX = 0;
     let previousY = 0;
     let horizontalDrag = false;
+    let dragged = false;
+    const raycaster = new THREE.Raycaster();
+    const pointerNdc = new THREE.Vector2();
 
-    const endPointer = (event: PointerEvent): void => {
-      if (activePointer !== event.pointerId || !canvas) return;
+    const releasePointer = (event: PointerEvent): void => {
+      if (!canvas) return;
       if (canvas.hasPointerCapture(event.pointerId)) {
         try { canvas.releasePointerCapture(event.pointerId); } catch { /* Capture may already be released. */ }
       }
+    };
+
+    const pickPage = (event: PointerEvent): void => {
+      if (!canvas || !renderer || contextLost) return;
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      pointerNdc.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+      scene.updateMatrixWorld();
+      raycaster.setFromCamera(pointerNdc, camera);
+      const hit = raycaster.intersectObjects(pickMeshes, false)[0];
+      if (hit) selectPage(hit.object.userData.pageIndex as number);
+    };
+
+    const endPointer = (event: PointerEvent): void => {
+      if (activePointer !== event.pointerId || !canvas) return;
+      const movement = Math.hypot(event.clientX - startX, event.clientY - startY);
+      const wasHorizontalDrag = horizontalDrag;
+      releasePointer(event);
       activePointer = null;
       horizontalDrag = false;
       canvas.style.cursor = 'grab';
+      if (movement < 7 && !dragged) pickPage(event);
+      else if (wasHorizontalDrag) scheduleFrame();
+      dragged = false;
     };
+
     const onPointerDown = (event: PointerEvent): void => {
       if (!canvas || activePointer !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
       activePointer = event.pointerId;
@@ -573,20 +1120,23 @@ export function mountScannerScene(host: HTMLElement): () => void {
       startX = previousX = event.clientX;
       startY = previousY = event.clientY;
       horizontalDrag = event.pointerType === 'mouse';
+      dragged = false;
       if (horizontalDrag) {
         try { canvas.setPointerCapture(event.pointerId); } catch { activePointer = null; return; }
         canvas.style.cursor = 'grabbing';
         event.preventDefault();
       }
     };
+
     const onPointerMove = (event: PointerEvent): void => {
       if (!canvas || activePointer !== event.pointerId) return;
       if (!horizontalDrag && activePointerType !== 'mouse') {
         const totalX = event.clientX - startX;
         const totalY = event.clientY - startY;
-        if (Math.max(Math.abs(totalX), Math.abs(totalY)) < 6) return;
-        if (Math.abs(totalY) >= Math.abs(totalX)) {
+        if (Math.max(Math.abs(totalX), Math.abs(totalY)) < 7) return;
+        if (Math.abs(totalY) >= Math.abs(totalX) * 1.05) {
           activePointer = null;
+          dragged = true;
           return;
         }
         horizontalDrag = true;
@@ -595,32 +1145,50 @@ export function mountScannerScene(host: HTMLElement): () => void {
       }
       if (!horizontalDrag) return;
       event.preventDefault();
-      yaw = clamp(yaw + (event.clientX - previousX) * 0.005, defaultYaw - 0.8, defaultYaw + 0.8);
-      pitch = clamp(pitch + (event.clientY - previousY) * 0.004, 0.18, 0.7);
+      const deltaX = event.clientX - previousX;
+      const deltaY = event.clientY - previousY;
+      if (Math.abs(event.clientX - startX) > 5 || Math.abs(event.clientY - startY) > 5) dragged = true;
+      orbitYaw = clamp(orbitYaw + deltaX * 0.005, defaultYaw - 0.72, defaultYaw + 0.72);
+      orbitPitch = clamp(orbitPitch + deltaY * 0.0035, 0.39, 0.98);
+      if (reducedMotion.matches) {
+        yaw = orbitYaw;
+        pitch = orbitPitch;
+        host.dataset.rotation = THREE.MathUtils.radToDeg(yaw - defaultYaw).toFixed(2);
+      }
       previousX = event.clientX;
       previousY = event.clientY;
-      updateCamera();
-      host.dataset.rotation = `${THREE.MathUtils.radToDeg(yaw).toFixed(2)},${THREE.MathUtils.radToDeg(pitch).toFixed(2)}`;
       scheduleFrame();
     };
+
     const cancelPointer = (event: PointerEvent): void => {
       if (activePointer === event.pointerId) {
+        releasePointer(event);
         activePointer = null;
         horizontalDrag = false;
+        dragged = true;
         if (canvas) canvas.style.cursor = 'grab';
       }
     };
+
     const onContextLost = (event: Event): void => {
       event.preventDefault();
       contextLost = true;
       host.classList.remove('is-webgl-ready');
       host.dataset.webgl = 'lost';
+      cropRig.visible = false;
+      outputGroup.visible = false;
       updateActivity();
     };
+
     const onContextRestored = (): void => {
       if (disposed) return;
       contextLost = false;
       lastTime = 0;
+      renderWidth = 0;
+      renderHeight = 0;
+      renderDpr = 0;
+      applyVisuals();
+      resize();
       updateActivity();
     };
 
@@ -669,6 +1237,17 @@ export function mountScannerScene(host: HTMLElement): () => void {
     cleanupTasks.push(() => document.removeEventListener('visibilitychange', onVisibilityChange));
     const onMotionChange = (): void => {
       lastTime = 0;
+      if (reducedMotion.matches && transition) {
+        transition = null;
+        settlePoses();
+        cleanAmount = mode === 'enhanced' ? 1 : 0;
+        outputAmount = mode === 'enhanced' ? 1 : 0;
+        host.dataset.sceneTransition = 'idle';
+      }
+      if (reducedMotion.matches) {
+        yaw = orbitYaw;
+        pitch = orbitPitch;
+      }
       resize();
     };
     reducedMotion.addEventListener('change', onMotionChange);
@@ -680,13 +1259,23 @@ export function mountScannerScene(host: HTMLElement): () => void {
       coarsePointer.removeEventListener('change', onMotionChange);
     });
 
-    host.appendChild(canvas);
+    settlePoses();
     updateCamera();
+    applyVisuals();
+    host.appendChild(canvas);
     resize();
-    return cleanup;
+
+    return {
+      destroy: cleanup,
+      selectPage,
+      toggleFan,
+      setMode,
+      reset,
+    };
   } catch {
     cleanup();
     host.dataset.webgl = 'fallback';
-    return () => undefined;
+    syncDataset();
+    return fallbackHandle();
   }
 }

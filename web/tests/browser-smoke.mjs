@@ -54,17 +54,51 @@ try {
   await page.addInitScript(() => localStorage.setItem('pdf-toolbox-language', 'en'));
   await page.goto(origin, { waitUntil: 'networkidle' });
   if (await page.locator('#fileInput').getAttribute('capture') !== null) throw new Error('Camera capture must not be enabled');
+  if (await page.locator('.brand-mark, .scanner-fallback').count()) throw new Error('Old brand icon or scanner artwork is still present');
+  const githubLink = page.locator('.github-button');
+  if (await githubLink.getAttribute('href') !== 'https://github.com/YUANYINGLONG-91') throw new Error('GitHub profile URL is incorrect');
+  if (await githubLink.getAttribute('target') !== '_blank' || await githubLink.getAttribute('rel') !== 'noopener noreferrer') throw new Error('GitHub link must open safely in a new tab');
+  if (await githubLink.locator('use').getAttribute('href') !== '#i-github') throw new Error('GitHub icon must be local');
   const scene = page.locator('[data-visual-scene]');
   await page.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'ready');
-  if (await scene.locator('canvas').count() !== 1) throw new Error('Expected one WebGL scanner canvas');
+  if (await scene.locator('canvas').count() !== 1) throw new Error('Expected one WebGL document-space canvas');
+  if (await scene.getAttribute('data-scene-state') !== 'fan' || await scene.getAttribute('data-fan') !== 'open') throw new Error('Document space should start with an open fan');
+  await page.locator('[data-scene-page="2"]').click();
+  if (await scene.getAttribute('data-selected-page') !== '3') throw new Error('Scene page selection did not update');
+  if (await page.locator('[data-scene-page="2"]').getAttribute('aria-pressed') !== 'true') throw new Error('Scene page selection is not exposed accessibly');
+  await page.locator('[data-scene-action="fan"]').click();
+  if (await scene.getAttribute('data-fan') !== 'closed') throw new Error('Gather pages control did not update the scene');
+  await page.locator('[data-scene-action="fan"]').click();
+  await page.locator('[data-scene-action="crop"]').click();
+  if (await scene.getAttribute('data-scene-state') !== 'crop') throw new Error('Crop scene control did not update the scene');
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: resolve(artifacts, 'home-3d-crop.png'), fullPage: true });
+  await page.locator('[data-scene-action="enhance"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.sceneState === 'enhanced' && document.querySelector('[data-visual-scene]')?.dataset.sceneTransition === 'idle');
+  await page.screenshot({ path: resolve(artifacts, 'home-3d-enhanced.png'), fullPage: true });
+  await page.locator('[data-scene-action="reset"]').click();
+  if (await scene.getAttribute('data-selected-page') !== '1' || await scene.getAttribute('data-fan') !== 'open' || await scene.getAttribute('data-scene-state') !== 'fan') throw new Error('Reset did not restore the document space');
+  await page.locator('[data-scene-page="1"]').focus();
+  await page.keyboard.press('Enter');
+  if (await scene.getAttribute('data-selected-page') !== '2') throw new Error('Keyboard scene page selection failed');
+  await page.locator('[data-scene-action="reset"]').click();
+  if (await scene.getAttribute('data-selected-page') !== '1' || await scene.getAttribute('data-scene-state') !== 'fan') throw new Error('Second reset did not restore the document space');
+  await page.waitForTimeout(450);
   await page.screenshot({ path: resolve(artifacts, 'home-3d-desktop.png'), fullPage: true });
+  const fileChooserPromise = page.waitForEvent('filechooser');
+  await page.locator('#chooseButton').click();
+  await fileChooserPromise;
+  const navButton = page.locator('.tool-nav-button').first();
+  await navButton.hover();
+  if (!await navButton.evaluate((element) => element.style.getPropertyValue('--depth-ry'))) throw new Error('Pointer-responsive control depth did not activate');
+  await page.mouse.move(5, 5);
   const sceneBounds = await scene.boundingBox();
-  if (!sceneBounds) throw new Error('Desktop scanner scene is not visible');
+  if (!sceneBounds) throw new Error('Desktop document scene is not visible');
   await page.mouse.move(sceneBounds.x + sceneBounds.width * 0.55, sceneBounds.y + sceneBounds.height * 0.45);
   await page.mouse.down();
   await page.mouse.move(sceneBounds.x + sceneBounds.width * 0.72, sceneBounds.y + sceneBounds.height * 0.5, { steps: 6 });
   await page.mouse.up();
-  if (!await scene.getAttribute('data-rotation')) throw new Error('Desktop scanner drag did not rotate the model');
+  if (!await scene.getAttribute('data-rotation')) throw new Error('Desktop document-space drag did not rotate the model');
 
   const dataUrl = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -97,6 +131,19 @@ try {
   const imageBuffer = Buffer.from(dataUrl.split(',')[1], 'base64');
   await page.locator('#fileInput').setInputFiles({ name: 'field-notes.png', mimeType: 'image/png', buffer: imageBuffer });
   await page.waitForFunction(() => document.getElementById('globalProgress').hidden && !document.getElementById('workspace').hidden, undefined, { timeout: 120000 });
+  const transformedCropGeometry = await page.evaluate(() => {
+    const transformed = [];
+    for (const id of ['cropSvg', 'resultView']) {
+      let element = document.getElementById(id);
+      while (element) {
+        const style = getComputedStyle(element);
+        if (style.transform !== 'none' || style.perspective !== 'none') transformed.push(`${id}:${element.id || element.className}`);
+        element = element.parentElement;
+      }
+    }
+    return transformed;
+  });
+  if (transformedCropGeometry.length) throw new Error(`Crop geometry must remain flat: ${transformedCropGeometry.join(', ')}`);
   await page.waitForFunction(() => document.getElementById('cropImage').naturalWidth > 0);
   await page.waitForFunction(() => {
     const image = document.getElementById('resultImage');
@@ -208,6 +255,10 @@ try {
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await mobilePage.waitForFunction(() => window.scrollY > 0);
+  await mobilePage.setViewportSize({ width: 320, height: 740 });
+  await mobilePage.evaluate(() => window.scrollTo(0, 0));
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) throw new Error('320px mobile home has horizontal overflow');
+  await mobilePage.screenshot({ path: resolve(artifacts, 'home-3d-mobile-320.png'), fullPage: true });
   await mobilePage.close();
 
   const reducedPage = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
@@ -218,7 +269,7 @@ try {
   const reducedFirst = await reducedScene.screenshot();
   await reducedPage.waitForTimeout(350);
   const reducedSecond = await reducedScene.screenshot();
-  if (!reducedFirst.equals(reducedSecond)) throw new Error('Reduced-motion scanner should render a static frame');
+  if (!reducedFirst.equals(reducedSecond)) throw new Error('Reduced-motion document space should render a static frame');
   await reducedPage.screenshot({ path: resolve(artifacts, 'home-3d-reduced.png'), fullPage: true });
   await reducedPage.close();
 
@@ -229,7 +280,8 @@ try {
     await fallbackPage.goto(origin, { waitUntil: 'networkidle' });
     await fallbackPage.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'fallback');
     if (await fallbackPage.locator('[data-visual-scene] canvas').count()) throw new Error('WebGL fallback should not leave a canvas behind');
-    if (!await fallbackPage.locator('.scanner-fallback').isVisible()) throw new Error('Static scanner fallback is not visible');
+    if (!await fallbackPage.locator('.document-fallback').isVisible()) throw new Error('Static document fallback is not visible');
+    if (await fallbackPage.locator('[data-scene-page]:not(:disabled), [data-scene-action]:not(:disabled)').count()) throw new Error('Fallback scene controls should be disabled');
     await fallbackPage.screenshot({ path: resolve(artifacts, 'home-3d-fallback.png'), fullPage: true });
   } finally {
     await fallbackBrowser.close();
@@ -237,7 +289,7 @@ try {
 
   if (errors.length) throw new Error(`Browser errors: ${errors.join('; ')}`);
   if (remoteRequests.length) throw new Error(`Unexpected remote requests: ${remoteRequests.join(', ')}`);
-  console.log(`Browser smoke test passed: WebGL scanner, desktop/mobile rotation, touch scrolling, reduced motion, WebGL fallback, import, crop handles, enhancement, rotation, reorder, Chinese UI, mobile layout, and ${pdf.getPageCount()}-page PDF.`);
+  console.log(`Browser smoke test passed: interactive 3D document space, accessible scene controls, GitHub link, tactile UI depth, desktop/mobile rotation, touch scrolling, reduced motion, WebGL fallback, flat crop geometry, import, enhancement, reorder, Chinese UI, and ${pdf.getPageCount()}-page PDF.`);
   console.log('No remote requests or uncaught browser errors observed.');
 } finally {
   await browser.close();
