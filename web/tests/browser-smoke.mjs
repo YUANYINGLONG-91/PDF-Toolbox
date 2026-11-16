@@ -54,6 +54,17 @@ try {
   await page.addInitScript(() => localStorage.setItem('pdf-toolbox-language', 'en'));
   await page.goto(origin, { waitUntil: 'networkidle' });
   if (await page.locator('#fileInput').getAttribute('capture') !== null) throw new Error('Camera capture must not be enabled');
+  const scene = page.locator('[data-visual-scene]');
+  await page.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'ready');
+  if (await scene.locator('canvas').count() !== 1) throw new Error('Expected one WebGL scanner canvas');
+  await page.screenshot({ path: resolve(artifacts, 'home-3d-desktop.png'), fullPage: true });
+  const sceneBounds = await scene.boundingBox();
+  if (!sceneBounds) throw new Error('Desktop scanner scene is not visible');
+  await page.mouse.move(sceneBounds.x + sceneBounds.width * 0.55, sceneBounds.y + sceneBounds.height * 0.45);
+  await page.mouse.down();
+  await page.mouse.move(sceneBounds.x + sceneBounds.width * 0.72, sceneBounds.y + sceneBounds.height * 0.5, { steps: 6 });
+  await page.mouse.up();
+  if (!await scene.getAttribute('data-rotation')) throw new Error('Desktop scanner drag did not rotate the model');
 
   const dataUrl = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -165,9 +176,68 @@ try {
   await page.screenshot({ path: resolve(artifacts, 'mobile-workspace.png'), fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   if (overflow) throw new Error('Mobile layout has horizontal overflow');
+
+  const observePage = (extraPage) => {
+    extraPage.on('pageerror', (error) => { errors.push(error.message); console.error('Browser error:', error.message); });
+    extraPage.on('request', (request) => {
+      const url = request.url();
+      if (!url.startsWith(origin) && !url.startsWith('blob:') && !url.startsWith('data:')) remoteRequests.push(url);
+    });
+  };
+  const mobilePage = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1.25, isMobile: true, hasTouch: true });
+  observePage(mobilePage);
+  await mobilePage.addInitScript(() => localStorage.setItem('pdf-toolbox-language', 'en'));
+  await mobilePage.goto(origin, { waitUntil: 'networkidle' });
+  await mobilePage.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'ready');
+  const mobileScene = mobilePage.locator('[data-visual-scene]');
+  if (await mobileScene.locator('canvas').evaluate((canvas) => getComputedStyle(canvas).touchAction) !== 'pan-y') throw new Error('Mobile scanner must preserve vertical scrolling');
+  await mobilePage.screenshot({ path: resolve(artifacts, 'home-3d-mobile.png'), fullPage: true });
+  if (await mobilePage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) throw new Error('Mobile home has horizontal overflow');
+  const mobileBounds = await mobileScene.boundingBox();
+  if (!mobileBounds) throw new Error('Mobile scanner scene is not visible');
+  const cdp = await mobilePage.context().newCDPSession(mobilePage);
+  const touchX = mobileBounds.x + mobileBounds.width * 0.5;
+  const touchY = Math.min(mobileBounds.y + mobileBounds.height * 0.45, 700);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchX, y: touchY }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchX + 70, y: touchY + 2 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  if (!await mobileScene.getAttribute('data-rotation')) throw new Error('Mobile horizontal drag did not rotate the model');
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: touchX, y: touchY }] });
+  for (let step = 1; step <= 5; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: touchX, y: touchY - step * 35 }] });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await mobilePage.waitForFunction(() => window.scrollY > 0);
+  await mobilePage.close();
+
+  const reducedPage = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
+  observePage(reducedPage);
+  await reducedPage.goto(origin, { waitUntil: 'networkidle' });
+  await reducedPage.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'ready');
+  const reducedScene = reducedPage.locator('[data-visual-scene]');
+  const reducedFirst = await reducedScene.screenshot();
+  await reducedPage.waitForTimeout(350);
+  const reducedSecond = await reducedScene.screenshot();
+  if (!reducedFirst.equals(reducedSecond)) throw new Error('Reduced-motion scanner should render a static frame');
+  await reducedPage.screenshot({ path: resolve(artifacts, 'home-3d-reduced.png'), fullPage: true });
+  await reducedPage.close();
+
+  const fallbackBrowser = await chromium.launch({ executablePath, headless: true, args: ['--disable-dev-shm-usage', '--disable-webgl'] });
+  try {
+    const fallbackPage = await fallbackBrowser.newPage({ viewport: { width: 1280, height: 900 } });
+    observePage(fallbackPage);
+    await fallbackPage.goto(origin, { waitUntil: 'networkidle' });
+    await fallbackPage.waitForFunction(() => document.querySelector('[data-visual-scene]')?.dataset.webgl === 'fallback');
+    if (await fallbackPage.locator('[data-visual-scene] canvas').count()) throw new Error('WebGL fallback should not leave a canvas behind');
+    if (!await fallbackPage.locator('.scanner-fallback').isVisible()) throw new Error('Static scanner fallback is not visible');
+    await fallbackPage.screenshot({ path: resolve(artifacts, 'home-3d-fallback.png'), fullPage: true });
+  } finally {
+    await fallbackBrowser.close();
+  }
+
   if (errors.length) throw new Error(`Browser errors: ${errors.join('; ')}`);
   if (remoteRequests.length) throw new Error(`Unexpected remote requests: ${remoteRequests.join(', ')}`);
-  console.log(`Browser smoke test passed: import, crop handles, enhancement, rotation, reorder, Chinese UI, mobile layout, and ${pdf.getPageCount()}-page PDF.`);
+  console.log(`Browser smoke test passed: WebGL scanner, desktop/mobile rotation, touch scrolling, reduced motion, WebGL fallback, import, crop handles, enhancement, rotation, reorder, Chinese UI, mobile layout, and ${pdf.getPageCount()}-page PDF.`);
   console.log('No remote requests or uncaught browser errors observed.');
 } finally {
   await browser.close();
